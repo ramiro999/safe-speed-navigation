@@ -1,10 +1,12 @@
 # lookahead_calculator.py
+
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from image_processing import preprocess_image, plot_detr_results
 from model_loader import load_detr_model
 import os
+from matplotlib import cm
 
 model = load_detr_model()
 
@@ -58,7 +60,7 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
     plt.legend()
     plt.tight_layout()
     plot_path1 = 'Lookahead_Distance_For_Stopping_Distance(kph).png'
-    #plt.savefig(plot_path1)
+    plt.savefig(plot_path1, bbox_inches="tight")
     plt.close()
 
     # Variables y cálculos para la segunda gráfica (AOV)
@@ -82,20 +84,53 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
     plt.grid()
     plt.legend()
     plot_path2 = 'HFOV_VFOV_Miliradians.png'
-    #plt.savefig(plot_path2)
+    plt.savefig(plot_path2, bbox_inches="tight")
     plt.close()
 
-    # Guardar los datos en un archivo de texto
-    txt_path = 'Lookahead_Distance_For_Swerve_Stop.txt'
-    with open(txt_path, 'w') as f:
-        f.write('Stopping Distance [m]\n')
-        for x, y in zip(v_kph, d_look_stop):
-            f.write(f'SPIE: Vehicle speed [kph]: {x} -- Lookahead distance [m]: {y}\n')
-        f.write('Swerve Distance [m]\n')
-        for x, y in zip(v_kph, d_look_swerve):
-            f.write(f'vT: Vehicle speed [kph]: {x} -- Lookahead distance [m]: {y}\n')
+    # Gráfico de IFOV para obstáculos positivos
+    hp = 0.1  # Altura del obstáculo positivo
+    IFOVp = np.arctan(hc / d_look_stop) - np.arctan((hc - hp) / d_look_stop)
+    
+    plt.figure()
+    plt.plot(v_kph, (IFOVp * 10**3), linewidth=2, label= 'IFOV Positive [miliradians]')
+    plt.xlabel('Vehicle speed [kph]')
+    plt.ylabel('Instantaneous Field of View [miliradians]')
+    plt.title('Instantaneous Field of View vs Vehicle Speed')
+    plt.grid()
+    plt.legend()
+    plt.xscale('log')
+    plt.yscale('log')
+    plot_path3 = 'IFOV_Miliradians.png'
+    plt.savefig(plot_path3, bbox_inches="tight")
+    plt.close()
 
-    # Procesar la imagen si se proporciona
+    # Gráfico para obstáculos positivos con diferentes alturas
+    stoppingDistance = np.arange(1, 1001)
+    hp_values = np.arange(0.1, 1.1, 0.1)
+    IFOVp = np.zeros((len(hp_values), len(stoppingDistance)))
+
+    for i, hp in enumerate(hp_values):
+        IFOVp[i, :] = np.arctan(hc / stoppingDistance) - np.arctan((hc - hp) / stoppingDistance)
+
+    plt.figure()
+    colors = cm.get_cmap('viridis', len(hp_values))
+    for i, hp in enumerate(hp_values):
+        plt.plot(stoppingDistance, IFOVp[i, :] * 10**3, color=colors(i), linewidth=2)
+
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.grid(True, which="both", linestyle="--", alpha=0.5)
+    plt.title('Positive Obstacle IFOV')
+    plt.xlabel('Sensor distance to the scene [m]')
+    plt.ylabel('IFOV [milliradians]')
+    plt.ylim([10**-4, 10**3])
+    hp_labels = [f'{h:.1f}' for h in hp_values]
+    plt.legend(hp_labels, title="Object size [m]", loc='lower left')
+    plt.tight_layout()
+    plot_path4 = 'Positive_Obstacle_IFOV.png'
+    plt.savefig(plot_path4, bbox_inches="tight")
+    plt.close()
+
     if image_path is not None:
         image, image_tensor = preprocess_image(image_path)
         with torch.no_grad():
@@ -108,6 +143,6 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
         labels = probas[keep].argmax(-1).numpy()
 
         fig_detr = plot_detr_results(image, bboxes, labels)
-        return fig_detr, plot_path1, plot_path2, txt_path
+        return fig_detr, plot_path1, plot_path2, plot_path3, plot_path4
 
-    return None, plot_path1, plot_path2, txt_path
+    return None, plot_path1, plot_path2, plot_path3, plot_path4

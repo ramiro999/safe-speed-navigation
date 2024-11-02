@@ -1,4 +1,5 @@
 # image_processing.py
+
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
@@ -10,7 +11,7 @@ COLORS = np.random.rand(len(COCO_INSTANCE_CATEGORY_NAMES), 3)
 
 # Transformación para las imágenes de entrada
 transform = T.Compose([
-    T.Resize(512),
+    T.Resize(800),
     T.ToTensor(),
     T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
@@ -35,6 +36,6 @@ def plot_detr_results(image, bboxes, labels):
         ax.text(x0, y0, COCO_INSTANCE_CATEGORY_NAMES[label], fontsize=14, color='black',
                 bbox=dict(facecolor=color, alpha=0.7))
 
-    ax.axis('off')
-    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    ax.axis('off')  # Ocultar ejes
+    #fig.tight_layout(pad=0)  # Ajustar el gráfico sin relleno
     return fig
