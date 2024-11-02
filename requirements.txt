@@ -1,0 +1,10 @@
+gradio
+numpy
+pandas
+matplotlib
+scikit-learn
+scipy
+requests
+flask
+tensorflow
+torch
