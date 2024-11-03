@@ -59,8 +59,8 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
     plt.ylim(0, 800)
     plt.legend()
     plt.tight_layout()
-    plot_path1 = 'Lookahead_Distance_For_Stopping_Distance(kph).png'
-    #plt.savefig(plot_path1, bbox_inches="tight")
+    plot_path1 = os.path.join('outputs', 'Lookahead_Distance_For_Stopping_Distance(kph).png')
+    plt.savefig(plot_path1, bbox_inches="tight")
     plt.close()
 
     # Variables y cálculos para la segunda gráfica (AOV)
@@ -83,8 +83,8 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
     plt.title('Angle of View (AOV) vs Vehicle Speed')
     plt.grid()
     plt.legend()
-    plot_path2 = 'HFOV_VFOV_Miliradians.png'
-    #plt.savefig(plot_path2, bbox_inches="tight")
+    plot_path2 = os.path.join('outputs', 'HFOV_VFOV_Miliradians.png')
+    plt.savefig(plot_path2, bbox_inches="tight")
     plt.close()
 
     # Gráfico de IFOV para obstáculos positivos
@@ -100,8 +100,8 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
     plt.legend()
     plt.xscale('log')
     plt.yscale('log')
-    plot_path3 = 'IFOV_Miliradians.png'
-    #plt.savefig(plot_path3, bbox_inches="tight")
+    plot_path3 = os.path.join('outputs', 'IFOV_Miliradians.png')
+    plt.savefig(plot_path3, bbox_inches="tight")
     plt.close()
 
     # Gráfico para obstáculos positivos con diferentes alturas
@@ -127,8 +127,8 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
     hp_labels = [f'{h:.1f}' for h in hp_values]
     plt.legend(hp_labels, title="Object size [m]", loc='lower left')
     plt.tight_layout()
-    plot_path4 = 'Positive_Obstacle_IFOV.png'
-    #plt.savefig(plot_path4, bbox_inches="tight")
+    plot_path4 = os.path.join('outputs', 'Positive_Obstacle_IFOV.png')
+    plt.savefig(plot_path4, bbox_inches="tight")
     plt.close()
 
     if image_path is not None:
