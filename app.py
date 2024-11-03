@@ -32,15 +32,15 @@ def calculate_distance(mu, t, l, B):
 
 # Interfaz de Gradio con dos secciones
 with gr.Blocks() as demo:
-    gr.Markdown("# Lookahead Distance Calculation with DETR")
-    gr.Markdown("This application allows you to detect objects in an image and calculate lookahead distance based on vehicle parameters.")
+    gr.Markdown("# Estimación de la velocidad de navegación segura para vehículos autónomos utilizando técnicas de visión por computadora")
+    gr.Markdown("En este proyecto se propone desarrollar un simulador para estimar la velocidad de navegación segura para vehículos autónomos en términos de maniobras de detención y evasión de obstáculos detectados por medio de algoritmos de visión por computadora en imágenes RGB adquiridas por un sistema de visión estéreo.")
 
     # Sección de Detección de Objetos
     with gr.Column():
-        gr.Markdown("## Object Detection Section")
-        input_image = gr.Image(type="filepath", label="Input Image")
-        result_plot = gr.Image(type="filepath", label="Object Detection Results")
-        detect_btn = gr.Button("Detect Objects")
+        gr.Markdown("## Sección de Detección de Objetos")
+        input_image = gr.Image(type="filepath", label="Imagen de entrada")
+        result_plot = gr.Image(type="filepath", label="Resultados de detección de objetos")
+        detect_btn = gr.Button("Detectar objetos")
         detect_btn.click(
             fn=object_detection,
             inputs=input_image,
@@ -52,22 +52,22 @@ with gr.Blocks() as demo:
 
     # Sección de Cálculo de Distancia
     with gr.Column():
-        gr.Markdown("## Lookahead Distance Calculation Section")
+        gr.Markdown("## Sección de calculo de la distancia segura")
 
-        mu = gr.Slider(0.0, 1.0, value=0.3, step=0.01, label="Friction Coefficient (mu)")
-        t = gr.Slider(0.0, 5.0, value=0.2, step=0.01, label="Perception Time (t) [s]")
-        l = gr.Slider(0.0, 5.0, value=0.25, step=0.01, label="Latency (l) [s]")
+        mu = gr.Slider(0.0, 1.0, value=0.3, step=0.01, label="Coeficiente de fricción (mu)")
+        t = gr.Slider(0.0, 5.0, value=0.2, step=0.01, label="Tiempo de percepción (t) [s]")
+        l = gr.Slider(0.0, 5.0, value=0.25, step=0.01, label="Latencia (l) [s]")
         B = gr.Slider(0.0, 5.0, value=2.0, step=0.1, label="Buffer (B) [m]")
 
         # Organizar las gráficas en dos filas
         with gr.Row():
-            distance_plot1 = gr.Image(type="filepath", label="Lookahead Distance Plot")
-            distance_plot2 = gr.Image(type="filepath", label="Angle of View Plot")
+            distance_plot1 = gr.Image(type="filepath", label="Gráfica de distancia segura")
+            distance_plot2 = gr.Image(type="filepath", label="Gráfica del ángulo de visión")
         with gr.Row():
-            distance_plot3 = gr.Image(type="filepath", label="IFOV Positive")
-            distance_plot4 = gr.Image(type="filepath", label="Positive Obstacle IFOV")
+            distance_plot3 = gr.Image(type="filepath", label="Campo de visión Instantaneo Positivo [miliradianes]")
+            distance_plot4 = gr.Image(type="filepath", label="Campo de visión instantaneo para los obstáculos")
 
-        calculate_btn = gr.Button("Calculate Distance")
+        calculate_btn = gr.Button("Calcular distancia segura")
         calculate_btn.click(
             fn=calculate_distance,
             inputs=[mu, t, l, B],
