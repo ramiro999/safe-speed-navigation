@@ -3,8 +3,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-from image_processing import preprocess_image, plot_detr_results
-from model_loader import load_detr_model
+from detr.image_processing import preprocess_image, plot_detr_results
+from detr.model_loader import load_detr_model
 import os
 from matplotlib import cm
 

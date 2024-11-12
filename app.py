@@ -1,9 +1,14 @@
 # app.py
+import sys
+sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
+sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF/ops/setup/MultiScaleDeformableAttention')
+#import MultiScaleDeformableAttention as MSDA
 
 import gradio as gr
 from lookahead_calculator import calculate_lookahead_distance
-from image_processing import preprocess_image, plot_detr_results
-from model_loader import load_detr_model
+from detr.image_processing import preprocess_image, plot_detr_results
+from detr.model_loader import load_detr_model
+from stereo.NMRF.inference import run_inference
 import torch
 
 # Cargar el modelo DETR
@@ -12,7 +17,7 @@ model = load_detr_model()
 # Función para solo la detección de objetos
 def object_detection(image_path):
     image, image_tensor = preprocess_image(image_path)
-    with torch.no_grad():
+    with torch.no_grad():                                
         outputs = model(image_tensor)
 
     probas = outputs['pred_logits'].softmax(-1)[0, :, :-1]
@@ -24,6 +29,16 @@ def object_detection(image_path):
     fig_detr = plot_detr_results(image, bboxes, labels)
     fig_detr.savefig("object_detection_results.png", bbox_inches="tight")
     return "object_detection_results.png"
+
+# Función para la inferencia estéreo con dos imágenes de entrada
+def stereo_inference(image_path_left, image_path_right):
+    dataset_name = "kitti_2015"
+    output = "./resultados_kitti"
+    resume_path = "pretrained/kitti.pth"
+    image_list = [(image_path_left, image_path_right)]
+
+    run_inference(dataset_name, output, resume_path, image_list)
+    return f"{output}/{dataset_name}_submission"
 
 # Función para el cálculo de distancia (sin detección de objetos)
 def calculate_distance(mu, t, l, B):
@@ -45,6 +60,22 @@ with gr.Blocks() as demo:
             fn=object_detection,
             inputs=input_image,
             outputs=result_plot
+        )
+
+    # Separador visual entre secciones
+    gr.Markdown("---")
+
+    # Sección de Inferencia Estéreo
+    with gr.Column():
+        gr.Markdown("## Sección de Inferencia Estéreo")
+        input_image_left = gr.Image(type="filepath", label="Imagen de entrada (izquierda)")
+        input_image_right = gr.Image(type="filepath", label="Imagen de entrada (derecha)")
+        result_plot_stereo = gr.Image(type="filepath", label="Resultados de inferencia estéreo")
+        infer_btn = gr.Button("Realizar inferencia")
+        infer_btn.click(
+            fn=stereo_inference,
+            inputs=[input_image_left, input_image_right],
+            outputs=result_plot_stereo
         )
 
     # Separador visual entre secciones
