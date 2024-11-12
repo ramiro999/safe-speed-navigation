@@ -1,8 +1,7 @@
-# app.py
+# app.py (modificación del archivo original)
 import sys
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF/ops/setup/MultiScaleDeformableAttention')
-#import MultiScaleDeformableAttention as MSDA
 
 import gradio as gr
 from lookahead_calculator import calculate_lookahead_distance
@@ -34,10 +33,11 @@ def object_detection(image_path):
 def stereo_inference(image_path_left, image_path_right):
     dataset_name = "kitti_2015"
     output = "./resultados_kitti"
-    resume_path = "pretrained/kitti.pth"
+    resume_path = "./stereo/NMRF/pretrained/kitti.pth"
     image_list = [(image_path_left, image_path_right)]
-
-    run_inference(dataset_name, output, resume_path, image_list)
+    
+    # Llamar a la función run_inference con los argumentos correctos
+    run_inference(dataset_name, output, resume_path, image_list, show_attr=False)
     return f"{output}/{dataset_name}_submission"
 
 # Función para el cálculo de distancia (sin detección de objetos)
