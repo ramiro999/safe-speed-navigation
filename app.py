@@ -1,13 +1,17 @@
-# app.py (modificación del archivo original)
+# app.py
 import sys
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF/ops/setup/MultiScaleDeformableAttention')
+
 
 import gradio as gr
 from lookahead_calculator import calculate_lookahead_distance
 from detr.image_processing import preprocess_image, plot_detr_results
 from detr.model_loader import load_detr_model
 from stereo.NMRF.inference import run_inference
+from stereo.NMRF.nmrf.data.datasets import KITTI
+import os
+
 import torch
 
 # Cargar el modelo DETR
@@ -29,15 +33,17 @@ def object_detection(image_path):
     fig_detr.savefig("object_detection_results.png", bbox_inches="tight")
     return "object_detection_results.png"
 
-# Función para la inferencia estéreo con dos imágenes de entrada
-def stereo_inference(image_path_left, image_path_right):
-    dataset_name = "kitti_2015"
+def stereo_inference(image_path_left=None, image_path_right=None):
+    dataset_name = "custom_dataset"
     output = "./resultados_kitti"
     resume_path = "./stereo/NMRF/pretrained/kitti.pth"
+
+    # Crear una lista con las imágenes de entrada proporcionadas por el usuario
     image_list = [(image_path_left, image_path_right)]
-    
-    # Llamar a la función run_inference con los argumentos correctos
-    run_inference(dataset_name, output, resume_path, image_list, show_attr=False)
+
+    # Realizar la inferencia usando las imágenes proporcionadas
+    run_inference(dataset_name, output, resume_path, image_list, show_attr="disparity")
+
     return f"{output}/{dataset_name}_submission"
 
 # Función para el cálculo de distancia (sin detección de objetos)
