@@ -1,18 +1,19 @@
 import os
 
-root_path = "/home/ramiro-avila/simulation-gradio/stereo/NMRF/datasets/KITTI"
-if os.path.exists(root_path):
-    print("La ruta existe y es accesible.")
-else:
-    print(f"La ruta '{root_path}' no existe o no es accesible.")
+def find_images(directory):
+    supported_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif')
+    images = [f for f in os.listdir(directory) if f.endswith(supported_extensions)]
+    images.sort(key=lambda x: os.path.getmtime(os.path.join(directory, x)), reverse=True)
+    return images
 
+def main():
+    directory = 'resultados_kitti'
+    if os.path.exists(directory):
+        images = find_images(directory)
+        for image in images:
+            print(image)
+    else:
+        print(f"Directory '{directory}' does not exist.")
 
-import sys
-sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
-
-from stereo.NMRF.nmrf.data.datasets import KITTI
-
-root_path = "/home/ramiro-avila/simulation-gradio/stereo/NMRF/datasets/KITTI"
-dataset = KITTI(root=root_path, split='testing', image_set='kitti_2015')
-print(f"Tamaño del dataset: {len(dataset.image_list)}")
-
+if __name__ == "__main__":
+    main()

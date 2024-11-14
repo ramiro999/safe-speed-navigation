@@ -1,18 +1,18 @@
-# app.py
 import sys
+import os
+import torch
+import gradio as gr
+
+# Añadir directorios al path
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF/ops/setup/MultiScaleDeformableAttention')
 
-
-import gradio as gr
+# Importar módulos personalizados
 from lookahead_calculator import calculate_lookahead_distance
 from detr.image_processing import preprocess_image, plot_detr_results
 from detr.model_loader import load_detr_model
 from stereo.NMRF.inference import run_inference
 from stereo.NMRF.nmrf.data.datasets import KITTI
-import os
-
-import torch
 
 # Cargar el modelo DETR
 model = load_detr_model()
@@ -33,6 +33,7 @@ def object_detection(image_path):
     fig_detr.savefig("object_detection_results.png", bbox_inches="tight")
     return "object_detection_results.png"
 
+# Modificación de la función `stereo_inference()`
 def stereo_inference(image_path_left=None, image_path_right=None):
     dataset_name = "custom_dataset"
     output = "./resultados_kitti"
@@ -44,7 +45,24 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     # Realizar la inferencia usando las imágenes proporcionadas
     run_inference(dataset_name, output, resume_path, image_list, show_attr="disparity")
 
-    return f"{output}/{dataset_name}_submission"
+    # Buscar la última imagen generada en la carpeta de resultados
+    result_files = [os.path.join(output, f) for f in os.listdir(output) if f.endswith(".png")]
+    if result_files:
+        # Ordenar los archivos por fecha de modificación para obtener el más reciente
+        result_files.sort(key=os.path.getmtime, reverse=True)
+        latest_result = result_files[0]  # Obtener el archivo más reciente
+        latest_result_abs_path = os.path.abspath(latest_result)
+        
+        # Verificar si el archivo es accesible
+        if os.path.exists(latest_result_abs_path):
+            print(f"Ruta absoluta del archivo generado más reciente: {latest_result_abs_path}")
+            return latest_result_abs_path
+        else:
+            raise FileNotFoundError(f"El archivo generado no existe: {latest_result_abs_path}")
+
+    # En caso de que no se encuentre un archivo, lanzar un error
+    raise FileNotFoundError("No se encontró ninguna imagen generada en la carpeta de resultados.")
+
 
 # Función para el cálculo de distancia (sin detección de objetos)
 def calculate_distance(mu, t, l, B):
@@ -83,6 +101,7 @@ with gr.Blocks() as demo:
             inputs=[input_image_left, input_image_right],
             outputs=result_plot_stereo
         )
+
 
     # Separador visual entre secciones
     gr.Markdown("---")
