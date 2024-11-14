@@ -30,6 +30,10 @@ def plot_detr_results(image, bboxes, labels):
         x0, y0 = (cx - w / 2) * image.width, (cy - h / 2) * image.height
         x1, y1 = (cx + w / 2) * image.width, (cy + h / 2) * image.height
 
+        # Calcular el área en píxeles
+        pixel_area = (x1 - x0) * (y1 - y0)
+
+
         color = COLORS[label]
         rect = plt.Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor=color, linewidth=2)
         ax.add_patch(rect)

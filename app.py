@@ -10,7 +10,7 @@ sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF/ops/setup/Mult
 # Importar módulos personalizados
 from lookahead_calculator import calculate_lookahead_distance
 from detr.image_processing import preprocess_image, plot_detr_results
-from detr.model_loader import load_detr_model
+from detr.model_loader import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
 from stereo.NMRF.inference import run_inference
 from stereo.NMRF.nmrf.data.datasets import KITTI
 
@@ -29,9 +29,31 @@ def object_detection(image_path):
     bboxes = outputs['pred_boxes'][0, keep].numpy()
     labels = probas[keep].argmax(-1).numpy()
 
+    # Calcular áreas y crear lista de información de objetos
+    objects_info = []
+    for bbox, label in zip(bboxes, labels):
+        cx, cy, w, h = bbox
+        x0, y0 = int((cx - w / 2) * image.width), int((cy - h / 2) * image.height)
+        x1, y1 = int((cx + w / 2) * image.width), int((cy + h / 2) * image.height)
+        pixel_area = (x1 - x0) * (y1 - y0)
+        
+        objects_info.append({
+            'class': COCO_INSTANCE_CATEGORY_NAMES[label],
+            'area': pixel_area,
+            'bbox': [x0, y0, x1, y1]
+        })
+
     fig_detr = plot_detr_results(image, bboxes, labels)
     fig_detr.savefig("object_detection_results.png", bbox_inches="tight")
-    return "object_detection_results.png"
+    
+    # Crear texto formateado con la información
+    info_text = "Objetos detectados:\n\n"
+    for obj in objects_info:
+        info_text += f"Clase: {obj['class']}\n"
+        info_text += f"Área: {obj['area']:,} píxeles\n"
+        info_text += f"Coordenadas: ({obj['bbox'][0]}, {obj['bbox'][1]}) a ({obj['bbox'][2]}, {obj['bbox'][3]})\n\n"
+
+    return "object_detection_results.png", info_text
 
 # Modificación de la función `stereo_inference()`
 def stereo_inference(image_path_left=None, image_path_right=None):
