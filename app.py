@@ -2,6 +2,7 @@ import sys
 import os
 import torch
 import gradio as gr
+import cv2
 #import uuid
 #import hashlib
 
@@ -15,6 +16,7 @@ from detr.image_processing import preprocess_image, plot_detr_results
 from detr.model_loader import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
 from stereo.NMRF.inference import run_inference
 from stereo.NMRF.nmrf.data.datasets import KITTI
+from stereo.NMRF.nmrf.utils.frame_utils import readDispVKITTI
 
 # Cargar el modelo DETR
 model = load_detr_model()
@@ -83,15 +85,18 @@ def stereo_inference(image_path_left=None, image_path_right=None):
         latest_result = result_files[0]  # Obtener el archivo más reciente
         latest_result_abs_path = os.path.abspath(latest_result)
         
-        # Verificar si el archivo es accesible
-        if os.path.exists(latest_result_abs_path):
-            print(f"Ruta absoluta del archivo generado más reciente: {latest_result_abs_path}")
-            return latest_result_abs_path
-        else:
-            raise FileNotFoundError(f"El archivo generado no existe: {latest_result_abs_path}")
+        # Generar el mapa de profundidad a partir de la imagen de disparidad
+        disp, valid = readDispVKITTI(latest_result_abs_path)
 
-    # En caso de que no se encuentre un archivo, lanzar un error
-    raise FileNotFoundError("No se encontró ninguna imagen generada en la carpeta de resultados.")
+        # Guardar el mapa de profundidad como una imagen
+        depth_map_filename = latest_result_abs_path.replace(".png", "_depth.png")
+        cv2.imwrite(depth_map_filename, disp)
+
+        # Devolver tanto el archivo de disparidad como el de profundidad
+        return latest_result_abs_path, depth_map_filename
+    else:
+        raise FileNotFoundError("No se encontró ninguna imagen generada en la carpeta de resultados.")
+
 
 
 # Función para el cálculo de distancia (sin detección de objetos)
@@ -125,13 +130,15 @@ with gr.Blocks() as demo:
         gr.Markdown("## Sección de Inferencia Estéreo")
         input_image_left = gr.Image(type="filepath", label="Imagen de entrada (izquierda)")
         input_image_right = gr.Image(type="filepath", label="Imagen de entrada (derecha)")
-        result_plot_stereo = gr.Image(type="filepath", label="Resultados de inferencia estéreo")
+        result_plot_stereo = gr.Image(type="filepath", label="Mapa de disparidad")
+        result_plot_depth = gr.Image(type="filepath", label="Mapa de profundidad")
         infer_btn = gr.Button("Realizar inferencia")
         infer_btn.click(
             fn=stereo_inference,
             inputs=[input_image_left, input_image_right],
-            outputs=result_plot_stereo
+            outputs=[result_plot_stereo, result_plot_depth]
         )
+
 
 
     # Separador visual entre secciones
