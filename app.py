@@ -35,17 +35,17 @@ def object_detection(image_path):
         cx, cy, w, h = bbox
         x0, y0 = int((cx - w / 2) * image.width), int((cy - h / 2) * image.height)
         x1, y1 = int((cx + w / 2) * image.width), int((cy + h / 2) * image.height)
-        pixel_area = (x1 - x0) * (y1 - y0)
+        height_bb = abs(y1 - y0)
         
         objects_info.append({
             'id': idx + 1,  # Identificador único para cada objeto
             'class': COCO_INSTANCE_CATEGORY_NAMES[label],
-            'area': pixel_area,
+            'height': height_bb,
             'bbox': [x0, y0, x1, y1]
         })
 
-    # Ordenar la lista de objetos por el área (de mayor a menor)
-    objects_info.sort(key=lambda x: x['area'], reverse=True)
+    # Ordenar la lista de objetos por el altura de mayor a menor
+    objects_info.sort(key=lambda x: x['height'], reverse=True)
 
     fig_detr = plot_detr_results(image, bboxes, labels)
     fig_detr.savefig("object_detection_results.png", bbox_inches="tight")
@@ -55,7 +55,7 @@ def object_detection(image_path):
     for obj in objects_info:
         info_text += f"ID: {obj['id']}\n"
         info_text += f"Clase: {obj['class']}\n"
-        info_text += f"Área: {obj['area']:,} píxeles\n"
+        info_text += f"Áltura objeto: {obj['height']:,} píxeles\n"
         info_text += f"Coordenadas: ({obj['bbox'][0]}, {obj['bbox'][1]}) a ({obj['bbox'][2]}, {obj['bbox'][3]})\n\n"
 
     return "object_detection_results.png", info_text
