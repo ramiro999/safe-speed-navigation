@@ -2,6 +2,8 @@ import sys
 import os
 import torch
 import gradio as gr
+#import uuid
+#import hashlib
 
 # Añadir directorios al path
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
@@ -17,10 +19,12 @@ from stereo.NMRF.nmrf.data.datasets import KITTI
 # Cargar el modelo DETR
 model = load_detr_model()
 
+global_object_id = 1
+
 # Función para solo la detección de objetos
 def object_detection(image_path):
     image, image_tensor = preprocess_image(image_path)
-    with torch.no_grad():                                
+    with torch.no_grad():
         outputs = model(image_tensor)
 
     probas = outputs['pred_logits'].softmax(-1)[0, :, :-1]
@@ -29,27 +33,25 @@ def object_detection(image_path):
     bboxes = outputs['pred_boxes'][0, keep].numpy()
     labels = probas[keep].argmax(-1).numpy()
 
-    # Calcular áreas y crear lista de información de objetos con identificadores únicos
     objects_info = []
-    for idx, (bbox, label) in enumerate(zip(bboxes, labels)):
+    for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):  # Usar un índice local
         cx, cy, w, h = bbox
         x0, y0 = int((cx - w / 2) * image.width), int((cy - h / 2) * image.height)
         x1, y1 = int((cx + w / 2) * image.width), int((cy + h / 2) * image.height)
         height_bb = abs(y1 - y0)
-        
+
         objects_info.append({
-            'id': idx + 1,  # Identificador único para cada objeto
+            'id': idx,  # Usar el índice local como ID
             'class': COCO_INSTANCE_CATEGORY_NAMES[label],
             'height': height_bb,
             'bbox': [x0, y0, x1, y1]
         })
 
-    # Ordenar la lista de objetos por el altura de mayor a menor
-    objects_info.sort(key=lambda x: x['height'], reverse=True)
-
-    fig_detr = plot_detr_results(image, bboxes, labels)
+    # Extraer IDs y pasar a la función de renderizado
+    ids = [obj['id'] for obj in objects_info]
+    fig_detr = plot_detr_results(image, bboxes, labels, ids)
     fig_detr.savefig("object_detection_results.png", bbox_inches="tight")
-    
+
     # Crear texto formateado con la información
     info_text = "Objetos detectados:\n\n"
     for obj in objects_info:
@@ -59,6 +61,7 @@ def object_detection(image_path):
         info_text += f"Coordenadas: ({obj['bbox'][0]}, {obj['bbox'][1]}) a ({obj['bbox'][2]}, {obj['bbox'][3]})\n\n"
 
     return "object_detection_results.png", info_text
+
 
 # Modificación de la función `stereo_inference()`
 def stereo_inference(image_path_left=None, image_path_right=None):
