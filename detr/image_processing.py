@@ -30,8 +30,10 @@ def plot_detr_results(image, bboxes, labels):
         x0, y0 = (cx - w / 2) * image.width, (cy - h / 2) * image.height
         x1, y1 = (cx + w / 2) * image.width, (cy + h / 2) * image.height
 
-        # Calcular el área en píxeles
-        pixel_area = (x1 - x0) * (y1 - y0)
+        # Calcular el área en píxeles asegurando valores positivos y redondeando
+        pixel_area = abs(round((x1 - x0) * (y1 - y0)))
+
+        ax.text(x0, y1 + 10, f'Area:{pixel_area}px²', fontsize=10, color='black', bbox=dict(facecolor='white', alpha=0.7))
 
 
         color = COLORS[label]
