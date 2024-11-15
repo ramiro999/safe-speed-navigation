@@ -55,3 +55,40 @@ def plot_detr_results(image, bboxes, labels, ids):
 
     ax.axis('off')  # Ocultar ejes
     return fig
+
+def plot_detr_results_with_distance(image, bboxes, labels, ids, distances):
+    """
+    Renderiza los resultados de detección con bounding boxes, IDs, nombres de las categorías y distancia promedio.
+
+    Args:
+        image: Imagen de entrada en formato PIL.
+        bboxes: Lista de bounding boxes normalizados ([cx, cy, w, h]).
+        labels: Lista de etiquetas de categorías detectadas.
+        ids: Lista de IDs únicos de los objetos detectados.
+        distances: Lista de distancias promedio para cada objeto detectado.
+
+    Returns:
+        fig: Figura de Matplotlib con los resultados renderizados.
+    """
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.imshow(image)
+
+    for bbox, label, obj_id, distance in zip(bboxes, labels, ids, distances):
+        cx, cy, w, h = bbox
+        x0, y0 = (cx - w / 2) * image.width, (cy - h / 2) * image.height
+        x1, y1 = (cx + w / 2) * image.width, (cy + h / 2) * image.height
+
+        # Calcular el color para la categoría
+        color = COLORS[label]
+
+        # Dibujar el bounding box
+        rect = plt.Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor=color, linewidth=2)
+        ax.add_patch(rect)
+
+        # Mostrar ID, clase y distancia promedio
+        text = f"ID: {obj_id}, {COCO_INSTANCE_CATEGORY_NAMES[label]}, {distance:.2f}m"
+        ax.text(x0, y0 - 10, text, fontsize=12, color='white',
+                bbox=dict(facecolor=color, alpha=0.7))
+
+    ax.axis('off')  # Ocultar ejes
+    return fig

@@ -3,8 +3,7 @@ import os
 import torch
 import gradio as gr
 import cv2
-#import uuid
-#import hashlib
+import numpy as np
 
 # Añadir directorios al path
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
@@ -12,58 +11,13 @@ sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF/ops/setup/Mult
 
 # Importar módulos personalizados
 from lookahead_calculator import calculate_lookahead_distance
-from detr.image_processing import preprocess_image, plot_detr_results
+from detr.image_processing import preprocess_image, plot_detr_results_with_distance
 from detr.model_loader import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
 from stereo.NMRF.inference import run_inference
-from stereo.NMRF.nmrf.data.datasets import KITTI
-from stereo.NMRF.nmrf.utils.frame_utils import readDispVKITTI
+from stereo.NMRF.nmrf.utils.frame_utils import readDepthVKITTI
 
 # Cargar el modelo DETR
 model = load_detr_model()
-
-global_object_id = 1
-
-# Función para solo la detección de objetos
-def object_detection(image_path):
-    image, image_tensor = preprocess_image(image_path)
-    with torch.no_grad():
-        outputs = model(image_tensor)
-
-    probas = outputs['pred_logits'].softmax(-1)[0, :, :-1]
-    keep = probas.max(-1).values > 0.8
-
-    bboxes = outputs['pred_boxes'][0, keep].numpy()
-    labels = probas[keep].argmax(-1).numpy()
-
-    objects_info = []
-    for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):  # Usar un índice local
-        cx, cy, w, h = bbox
-        x0, y0 = int((cx - w / 2) * image.width), int((cy - h / 2) * image.height)
-        x1, y1 = int((cx + w / 2) * image.width), int((cy + h / 2) * image.height)
-        height_bb = abs(y1 - y0)
-
-        objects_info.append({
-            'id': idx,  # Usar el índice local como ID
-            'class': COCO_INSTANCE_CATEGORY_NAMES[label],
-            'height': height_bb,
-            'bbox': [x0, y0, x1, y1]
-        })
-
-    # Extraer IDs y pasar a la función de renderizado
-    ids = [obj['id'] for obj in objects_info]
-    fig_detr = plot_detr_results(image, bboxes, labels, ids)
-    fig_detr.savefig("object_detection_results.png", bbox_inches="tight")
-
-    # Crear texto formateado con la información
-    info_text = "Objetos detectados:\n\n"
-    for obj in objects_info:
-        info_text += f"ID: {obj['id']}\n"
-        info_text += f"Clase: {obj['class']}\n"
-        info_text += f"Áltura objeto: {obj['height']:,} píxeles\n"
-        info_text += f"Coordenadas: ({obj['bbox'][0]}, {obj['bbox'][1]}) a ({obj['bbox'][2]}, {obj['bbox'][3]})\n\n"
-
-    return "object_detection_results.png", info_text
-
 
 # Modificación de la función `stereo_inference()`
 def stereo_inference(image_path_left=None, image_path_right=None):
@@ -85,19 +39,74 @@ def stereo_inference(image_path_left=None, image_path_right=None):
         latest_result = result_files[0]  # Obtener el archivo más reciente
         latest_result_abs_path = os.path.abspath(latest_result)
         
-        # Generar el mapa de profundidad a partir de la imagen de disparidad
-        disp, valid = readDispVKITTI(latest_result_abs_path)
+        # Verificar si el archivo es accesible
+        if os.path.exists(latest_result_abs_path):
+            print(f"Ruta absoluta del archivo generado más reciente: {latest_result_abs_path}")
+            return latest_result_abs_path
+        else:
+            raise FileNotFoundError(f"El archivo generado no existe: {latest_result_abs_path}")
 
-        # Guardar el mapa de profundidad como una imagen
-        depth_map_filename = latest_result_abs_path.replace(".png", "_depth.png")
-        cv2.imwrite(depth_map_filename, disp)
+    # En caso de que no se encuentre un archivo, lanzar un error
+    raise FileNotFoundError("No se encontró ninguna imagen generada en la carpeta de resultados.")
 
-        # Devolver tanto el archivo de disparidad como el de profundidad
-        return latest_result_abs_path, depth_map_filename
-    else:
-        raise FileNotFoundError("No se encontró ninguna imagen generada en la carpeta de resultados.")
+# Función para detección de objetos y calcular la distancia usando la disparidad
+def object_detection_with_disparity(image_path, disparity_path):
+    image, image_tensor = preprocess_image(image_path)
+    with torch.no_grad():
+        outputs = model(image_tensor)
 
+    probas = outputs['pred_logits'].softmax(-1)[0, :, :-1]
+    keep = probas.max(-1).values > 0.8
 
+    bboxes = outputs['pred_boxes'][0, keep].numpy()
+    labels = probas[keep].argmax(-1).numpy()
+
+    # Leer mapa de disparidad y calcular profundidad
+    disparity, valid = readDepthVKITTI(disparity_path)
+
+    objects_info = []
+    for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):
+        cx, cy, w, h = bbox
+        x0, y0 = int((cx - w / 2) * image.width), int((cy - h / 2) * image.height)
+        x1, y1 = int((cx + w / 2) * image.width), int((cy + h / 2) * image.height)
+        height_bb = abs(y1 - y0)
+
+        # Recortar la región correspondiente al bounding box en el mapa de disparidad
+        bbox_disp = disparity[y0:y1, x0:x1]
+        bbox_valid = valid[y0:y1, x0:x1]
+
+        # Calcular distancia promedio en la región válida
+        if bbox_valid.any():
+            avg_distance = bbox_disp[bbox_valid].mean() / 100  # Convertir a metros
+        else:
+            avg_distance = float('inf')  # Si no hay valores válidos, poner infinito
+
+        objects_info.append({
+            'id': idx,
+            'class': COCO_INSTANCE_CATEGORY_NAMES[label],
+            'height': height_bb,
+            'bbox': [x0, y0, x1, y1],
+            'distance': avg_distance  # Agregar distancia promedio
+        })
+
+    # Extraer IDs y distancias para visualización
+    ids = [obj['id'] for obj in objects_info]
+    distances = [obj['distance'] for obj in objects_info]
+
+    # Dibujar resultados en la imagen
+    fig_detr = plot_detr_results_with_distance(image, bboxes, labels, ids, distances)
+    fig_detr.savefig("object_detection_results_with_distances.png", bbox_inches="tight")
+
+    # Crear texto formateado con la información
+    info_text = "Objetos detectados:\n\n"
+    for obj in objects_info:
+        info_text += f"ID: {obj['id']}\n"
+        info_text += f"Clase: {obj['class']}\n"
+        info_text += f"Altura objeto: {obj['height']:,} píxeles\n"
+        info_text += f"Coordenadas: ({obj['bbox'][0]}, {obj['bbox'][1]}) a ({obj['bbox'][2]}, {obj['bbox'][3]})\n"
+        info_text += f"Distancia promedio: {obj['distance']:.2f} metros\n\n"
+
+    return "object_detection_results_with_distances.png", info_text
 
 # Función para el cálculo de distancia (sin detección de objetos)
 def calculate_distance(mu, t, l, B):
@@ -111,35 +120,26 @@ with gr.Blocks() as demo:
 
     # Sección de Detección de Objetos
     with gr.Column():
-        gr.Markdown("## Sección de Detección de Objetos")
-        input_image = gr.Image(type="filepath", label="Imagen de entrada")
-        result_plot = gr.Image(type="filepath", label="Resultados de detección de objetos")
-        result_info = gr.Textbox(label="Información de objetos detectados", lines=10)
-        detect_btn = gr.Button("Detectar objetos")
-        detect_btn.click(
-            fn=object_detection,
-            inputs=input_image,
-            outputs=[result_plot, result_info]
-        )
-
-    # Separador visual entre secciones
-    gr.Markdown("---")
-
-    # Sección de Inferencia Estéreo
-    with gr.Column():
-        gr.Markdown("## Sección de Inferencia Estéreo")
+        gr.Markdown("## Sección de Inferencia Estéreo y Detección de Objetos")
         input_image_left = gr.Image(type="filepath", label="Imagen de entrada (izquierda)")
         input_image_right = gr.Image(type="filepath", label="Imagen de entrada (derecha)")
-        result_plot_stereo = gr.Image(type="filepath", label="Mapa de disparidad")
-        result_plot_depth = gr.Image(type="filepath", label="Mapa de profundidad")
-        infer_btn = gr.Button("Realizar inferencia")
+        result_plot_stereo = gr.Image(type="filepath", label="Resultados de disparidad")
+        detect_objects_plot = gr.Image(type="filepath", label="Resultados de detección con distancias")
+        result_info = gr.Textbox(label="Información de objetos detectados", lines=10)
+        
+        infer_btn = gr.Button("Realizar inferencia y detectar objetos")
+        
+        # Realizar inferencia para generar disparidad y luego calcular distancia de objetos detectados
+        def full_pipeline(image_path_left, image_path_right):
+            disparity_path = stereo_inference(image_path_left, image_path_right)
+            detection_result_path, info_text = object_detection_with_disparity(image_path_left, disparity_path)
+            return disparity_path, detection_result_path, info_text
+        
         infer_btn.click(
-            fn=stereo_inference,
+            fn=full_pipeline,
             inputs=[input_image_left, input_image_right],
-            outputs=[result_plot_stereo, result_plot_depth]
+            outputs=[result_plot_stereo, detect_objects_plot, result_info]
         )
-
-
 
     # Separador visual entre secciones
     gr.Markdown("---")
