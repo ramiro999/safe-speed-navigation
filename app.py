@@ -4,7 +4,7 @@ import torch
 import gradio as gr
 import cv2
 import numpy as np
-
+                                               
 # Añadir directorios al path
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF/ops/setup/MultiScaleDeformableAttention')
