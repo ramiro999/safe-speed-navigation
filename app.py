@@ -260,9 +260,12 @@ with gr.Blocks(theme=seafoam) as demo:
     """)
 
     with gr.Tab("Inicio"):
-        gr.HTML("""
+        gr.HTML("""""
         <div class="title-text">
             Estimación de la velocidad de navegación segura para vehículos autónomos utilizando técnicas de visión por computadora
+        </div>
+        <div>
+            <img src="https://www.gradio.app/static/landing/img/hero.png" class="welcome-image" />
         </div>
         
         <div class="description-text">
