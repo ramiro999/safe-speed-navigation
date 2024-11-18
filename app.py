@@ -1,3 +1,5 @@
+#app.py
+
 import sys
 import os
 import torch
@@ -163,7 +165,12 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase):
         turning_angle=turning_car,
         image_path=None  # Si necesitas una imagen de referencia, pásala aquí
     )
-    return plot_path1, plot_path2, plot_path3, plot_path4
+    return (
+        gr.update(value=plot_path1, visible=True),
+        gr.update(value=plot_path2, visible=True),
+        gr.update(value=plot_path3, visible=True),
+        gr.update(value=plot_path4, visible=True)
+    )
 
 # Diseño de la interfaz de Gradio
 class Seafoam(Base):
@@ -280,7 +287,7 @@ with gr.Blocks(theme=seafoam) as demo:
         run_button.click(object_detection_with_disparity, outputs=[detect_output_image, detect_output_text])
 
     with gr.Tab("Calculate Distance"):
-        gr.Markdown("## Sección de calculo de la distancia segura")
+        gr.Markdown("## Safe distance calculation section")
         with gr.Row():
             with gr.Column():
                 mu = gr.Slider(0.0, 1.0, value=0.3, step=0.01, label="Coeficiente de fricción (mu)")
@@ -293,11 +300,14 @@ with gr.Blocks(theme=seafoam) as demo:
                 wheelbase = gr.Slider(0.0, 3.0, value=1.5, step=0.01, label="Width of Wheelbase [m]")
 
         # Organizar las gráficas en dos filas
-        distance_plot1 = gr.Image(type="filepath", label="Gráfica de distancia segura", visible=False)
-        distance_plot2 = gr.Image(type="filepath", label="Gráfica del ángulo de visión", visible=False)
-        distance_plot3 = gr.Image(type="filepath", label="Campo de visión Instantaneo Positivo [miliradianes]", visible=False)
-        distance_plot4 = gr.Image(type="filepath", label="Campo de visión instantaneo para los obstáculos", visible=False)
-        
+        with gr.Row():
+            with gr.Column():
+                distance_plot1 = gr.Image(type="filepath", label="Gráfica de distancia segura", visible=False)
+                distance_plot3 = gr.Image(type="filepath", label="Campo de visión Instantaneo Positivo [miliradianes]", visible=False)
+            with gr.Column():
+                distance_plot2 = gr.Image(type="filepath", label="Gráfica del ángulo de visión", visible=False)
+                distance_plot4 = gr.Image(type="filepath", label="Campo de visión instantaneo para los obstáculos", visible=False)
+                
         run_button = gr.Button("Calculate Distance")
         run_button.click(calculate_distance, inputs=[mu, t, l, B, turning_car, cog, wheelbase], outputs=[distance_plot1, distance_plot2, distance_plot3, distance_plot4])
 

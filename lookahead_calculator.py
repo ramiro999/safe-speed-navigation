@@ -1,5 +1,3 @@
-# lookahead_calculator.py
-
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -8,23 +6,28 @@ from detr.model_loader import load_detr_model
 import os
 from matplotlib import cm
 
+# Cargar el modelo (si es necesario para procesamiento adicional)
 model = load_detr_model()
 
-def calculate_lookahead_distance(mu, t, l, B, image_path=None):
-    # Parámetros fijos para el modelo
+# Asegurarse de que exista el directorio de salida
+output_directory = 'outputs'
+if not os.path.exists(output_directory):
+    os.makedirs(output_directory)
+
+def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, image_path=None):
+    # Parámetros fijos para el modelo (algunos se han convertido en parámetros de la función)
     g = 9.81
-    a = -9
-    Tper = 0.1
-    Tact = 0.25
-    d_offset = 2
-    w = 1.82
-    cog = 0.767
-    turningCar = 7.62
+    a = -9  # Desaceleración durante el frenado [m/s^2]
+    Tper = t  # Tiempo de percepción
+    Tact = l  # Latencia
+    d_offset = B  # Distancia buffer [m]
+    w = wheelbase  # Ancho del vehículo
+    turningCar = turning_angle  # Ángulo de giro del vehículo
 
     # Rangos de velocidad
-    v_mph = np.arange(1, 151)
-    v_kph = v_mph * 1.609
-    v_mtps = v_mph * (1609.34 / 3600)
+    v_mph = np.arange(1, 151)  # Velocidades de 1 a 150 mph
+    v_kph = v_mph * 1.609  # Conversion de mph a kph
+    v_mtps = v_mph * (1609.34 / 3600)  # Conversion de mph a metros por segundo
 
     # Inicializar distancias para la primera gráfica
     d_per = np.zeros_like(v_mtps)
@@ -39,15 +42,15 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
 
     # Calcular las distancias de frenado y maniobra para la primera gráfica
     for v in range(1, 151):
-        d_per[v-1] = v_mtps[v-1] * (2 * Tper)
-        d_act[v-1] = v_mtps[v-1] * Tact
-        d_brake[v-1] = -v_mtps[v-1]**2 / (2 * a)
-        d_look_stop[v-1] = d_offset + d_per[v-1] + d_act[v-1] + d_brake[v-1]
-        K_roll[v-1] = (g * (w / 2)) / (cog * v_mtps[v-1]**2)
-        K_slip[v-1] = (mu * g) / (v_mtps[v-1]**2)
-        turning[v-1] = max(1 / (min(K_roll[v-1], K_slip[v-1])), turningCar)
-        d_swerve[v-1] = np.real(np.sqrt(turning[v-1]**2 - (turning[v-1] - w)**2))
-        d_look_swerve[v-1] = d_offset + d_per[v-1] + d_act[v-1] + d_swerve[v-1]
+        d_per[v - 1] = v_mtps[v - 1] * (2 * Tper)
+        d_act[v - 1] = v_mtps[v - 1] * Tact
+        d_brake[v - 1] = -v_mtps[v - 1] ** 2 / (2 * a)
+        d_look_stop[v - 1] = d_offset + d_per[v - 1] + d_act[v - 1] + d_brake[v - 1]
+        K_roll[v - 1] = (g * (w / 2)) / (cog * v_mtps[v - 1] ** 2)
+        K_slip[v - 1] = (mu * g) / (v_mtps[v - 1] ** 2)
+        turning[v - 1] = max(1 / (min(K_roll[v - 1], K_slip[v - 1])), turningCar)
+        d_swerve[v - 1] = np.real(np.sqrt(turning[v - 1] ** 2 - (turning[v - 1] - w) ** 2))
+        d_look_swerve[v - 1] = d_offset + d_per[v - 1] + d_act[v - 1] + d_swerve[v - 1]
 
     # Generar la primera gráfica (Lookahead Distance)
     plt.figure(figsize=(10, 6))
@@ -65,14 +68,14 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
 
     # Variables y cálculos para la segunda gráfica (AOV)
     HFOV = np.zeros_like(v_mtps)
-    hc = 2
-    thetaSlope = np.deg2rad(15)
+    hc = 2  # Altura del centro de gravedad [m]
+    thetaSlope = np.deg2rad(15)  # Ángulo de la pendiente
     thetaMin = np.arctan(hc / d_look_stop)
     thetaMax = np.arctan(hc / d_offset)
     VFOV = 2 * thetaSlope + np.minimum(thetaMin, thetaMax)
 
     for v in range(1, 101):
-        HFOV[v-1] = d_look_stop[v-1] / turning[v-1]
+        HFOV[v - 1] = d_look_stop[v - 1] / turning[v - 1]
 
     # Generar la segunda gráfica (Angle of View)
     plt.figure(figsize=(10, 6))
@@ -90,9 +93,9 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
     # Gráfico de IFOV para obstáculos positivos
     hp = 0.1  # Altura del obstáculo positivo
     IFOVp = np.arctan(hc / d_look_stop) - np.arctan((hc - hp) / d_look_stop)
-    
+
     plt.figure()
-    plt.plot(v_kph, (IFOVp * 10**3), linewidth=2, label= 'IFOV Positive [miliradians]')
+    plt.plot(v_kph, (IFOVp * 10 ** 3), linewidth=2, label='IFOV Positive [miliradians]')
     plt.xlabel('Vehicle speed [kph]')
     plt.ylabel('Instantaneous Field of View [miliradians]')
     plt.title('Instantaneous Field of View vs Vehicle Speed')
@@ -115,7 +118,7 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
     plt.figure()
     colors = cm.get_cmap('viridis', len(hp_values))
     for i, hp in enumerate(hp_values):
-        plt.plot(stoppingDistance, IFOVp[i, :] * 10**3, color=colors(i), linewidth=2)
+        plt.plot(stoppingDistance, IFOVp[i, :] * 10 ** 3, color=colors(i), linewidth=2)
 
     plt.xscale('log')
     plt.yscale('log')
@@ -123,7 +126,7 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
     plt.title('Positive Obstacle IFOV')
     plt.xlabel('Sensor distance to the scene [m]')
     plt.ylabel('IFOV [milliradians]')
-    plt.ylim([10**-4, 10**3])
+    plt.ylim([10 ** -4, 10 ** 3])
     hp_labels = [f'{h:.1f}' for h in hp_values]
     plt.legend(hp_labels, title="Object size [m]", loc='lower left')
     plt.tight_layout()
@@ -131,6 +134,7 @@ def calculate_lookahead_distance(mu, t, l, B, image_path=None):
     plt.savefig(plot_path4, bbox_inches="tight")
     plt.close()
 
+    # Detección opcional si se proporciona una imagen
     if image_path is not None:
         image, image_tensor = preprocess_image(image_path)
         with torch.no_grad():
