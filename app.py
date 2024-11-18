@@ -25,6 +25,7 @@ model = load_detr_model()
 
 # Variable global para almacenar la imagen de salida de Stereo Inference
 stereo_output_image = None
+image_path_left_original = None
 
 def save_temp_image(image_array):
     """
@@ -49,7 +50,9 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     if not isinstance(image_path_left, str) or not isinstance(image_path_right, str):
         raise ValueError("Las entradas deben ser rutas de archivo o imágenes numpy.ndarray.")
 
-    global stereo_output_image
+    global stereo_output_image, image_path_left_original
+    image_path_left_original = image_path_left  # Guardar la imagen original para la detección de objetos
+
     dataset_name = "custom_dataset"
     output = "./resultados_kitti"
     resume_path = "./stereo/NMRF/pretrained/kitti.pth"
@@ -73,12 +76,27 @@ def stereo_inference(image_path_left=None, image_path_right=None):
 
 # Función para detección de objetos y calcular la distancia usando la disparidad
 def object_detection_with_disparity():
-    global stereo_output_image
-    if stereo_output_image is None:
-        raise ValueError("No se ha generado una imagen de salida de Stereo Inference.")
+    global stereo_output_image, image_path_left_original
+    if stereo_output_image is None or image_path_left_original is None:
+        raise ValueError("No se ha generado una imagen de salida de Stereo Inference o no se ha proporcionado la imagen original.")
 
-    # Procesar la imagen original
-    image, image_tensor = preprocess_image(stereo_output_image)
+    # Leer la imagen de disparidad
+    disparity, valid = readDepthVKITTI(stereo_output_image)
+
+    # Leer la imagen RGB original (una de las imágenes estéreo)
+    image = cv2.imread(image_path_left_original, cv2.IMREAD_UNCHANGED)
+
+    # Verificar si la imagen tiene un canal alfa (es decir, 4 canales: RGBA) y convertir a RGB
+    if image.shape[-1] == 4:
+        image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+
+    # Si la imagen está en escala de grises, convertir a RGB
+    if len(image.shape) == 2 or image.shape[-1] == 1:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+
+    # Preprocesar la imagen para la entrada del modelo DETR
+    _, image_tensor = preprocess_image(image)
+
     with torch.no_grad():
         outputs = model(image_tensor)
 
@@ -89,18 +107,15 @@ def object_detection_with_disparity():
     bboxes = outputs['pred_boxes'][0, keep].numpy()
     labels = probas[keep].argmax(-1).numpy()
 
-    # Leer mapa de disparidad
-    disparity, valid = readDepthVKITTI(stereo_output_image)
-
     # Procesar información de objetos detectados
     objects_info = []
     for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):
         cx, cy, w, h = bbox
-        x0, y0 = int((cx - w / 2) * image.width), int((cy - h / 2) * image.height)
-        x1, y1 = int((cx + w / 2) * image.width), int((cy + h / 2) * image.height)
+        x0, y0 = int((cx - w / 2) * image.shape[1]), int((cy - h / 2) * image.shape[0])
+        x1, y1 = int((cx + w / 2) * image.shape[1]), int((cy + h / 2) * image.shape[0])
         height_bb = abs(y1 - y0)
 
-        # Recortar región del mapa de disparidad
+        # Recortar región del mapa de disparidad correspondiente al bounding box
         bbox_disp = disparity[y0:y1, x0:x1]
         bbox_valid = valid[y0:y1, x0:x1]
 
@@ -259,9 +274,10 @@ with gr.Blocks(theme=seafoam) as demo:
 
     with gr.Tab("Object Detection"):
         gr.Markdown("## Object Detection")
-        output_image = gr.Image(label="Output Image")
+        detect_output_image = gr.Image(label="Object Detection Output Image", visible=True)
+        detect_output_text = gr.Textbox(label="Detected Objects Info", lines=10, interactive=False)
         run_button = gr.Button("Run Detection")
-        run_button.click(object_detection_with_disparity, outputs=output_image)
+        run_button.click(object_detection_with_disparity, outputs=[detect_output_image, detect_output_text])
 
     with gr.Tab("Calculate Distance"):
         gr.Markdown("## Sección de calculo de la distancia segura")
