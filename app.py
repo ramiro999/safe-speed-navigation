@@ -339,7 +339,7 @@ with gr.Blocks(theme=seafoam) as demo:
             inputs=[wheelbase, cog, turning_car],
             label="Vehicle Examples",
         )
-
+        
         run_button = gr.Button("Calculate Distance")
         
         # Organizar las gráficas en dos filas
@@ -352,5 +352,6 @@ with gr.Blocks(theme=seafoam) as demo:
                 distance_plot4 = gr.Plot(label="Positive Obstacle IFOV")
                 
         run_button.click(calculate_distance, inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_id], outputs=[distance_plot1, distance_plot2, distance_plot3, distance_plot4])
+
 
 demo.launch(share=True)

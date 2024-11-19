@@ -5,11 +5,11 @@ import torch
 from detr.image_processing import preprocess_image, plot_detr_results
 from detr.model_loader import load_detr_model
 
-# Cargar el modelo (si es necesario para procesamiento adicional)
+# Cargar el modelo
 model = load_detr_model()
 
 def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, object_height=None, object_distance=None, image_path=None):
-    # Parámetros fijos para el modelo (algunos se han convertido en parámetros de la función)
+    # Parámetros fijos para el modelo 
     g = 9.81
     a = -9  # Desaceleración durante el frenado [m/s^2]
     Tper = t  # Tiempo de percepción
