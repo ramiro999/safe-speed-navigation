@@ -296,9 +296,9 @@ with gr.Blocks(theme=seafoam) as demo:
         # Agregar ejemplos de imágenes estereoscópicas
         examples = gr.Examples(
             examples=[
-                ["./stereo_images/images_left/000026_10.png", "./stereo_images/images_right/000026_10.png"],
-                ["./stereo_images/images_left/000028_10.png", "./stereo_images/images_right/000028_10.png"],
-                ["./stereo_images/images_left/000023_10.png", "./stereo_images/images_right/000023_10.png"]
+                ["./examples/left_image1.png", "./examples/right_image1.png"],
+                ["./examples/left_image2.png", "./examples/right_image2.png"],
+                ["./examples/left_image3.png", "./examples/right_image3.png"]
             ],
             inputs=[image_path_left, image_path_right],
             label="Example Stereo Images",
@@ -324,10 +324,21 @@ with gr.Blocks(theme=seafoam) as demo:
                 l = gr.Slider(0.0, 5.0, value=0.25, step=0.01, label="Latencia (l) [s]")
                 B = gr.Slider(0.0, 5.0, value=2.0, step=0.1, label="Buffer (B) [m]")
             with gr.Column():
-                turning_car = gr.Slider(0.0, 360.0, value=180.0, step=1.0, label="Turning Car [°]")
-                cog = gr.Slider(0.0, 2.0, value=1.0, step=0.01, label="Height of Center Gravity (COG) [m]")
+                turning_car = gr.Slider(0.0, 20.0, value=10.0, step=1.0, label="Turning Car [°]")
+                cog = gr.Slider(0.0, 2.0, value=0.5, step=0.01, label="Height of Center Gravity (COG) [m]")
                 wheelbase = gr.Slider(0.0, 3.0, value=1.5, step=0.01, label="Width of Wheelbase [m]")
                 selected_object_id = gr.Number(value=1, label="Selected Object ID", precision=0, interactive=True)
+
+        # Agregar ejemplos de vehículos para calcular la distancia
+        examples = gr.Examples(
+            examples=[
+                [2.96, 0.46, 11.8],  # Tesla S
+                [2.47, 0.4953, 10.40],  # Toyota Supra
+                [2.72, 0.4953, 12.67]  # Ford Mustang Shelby GT350
+            ],
+            inputs=[wheelbase, cog, turning_car],
+            label="Vehicle Examples",
+        )
 
         run_button = gr.Button("Calculate Distance")
         
