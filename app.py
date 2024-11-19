@@ -296,9 +296,9 @@ with gr.Blocks(theme=seafoam) as demo:
         # Agregar ejemplos de imágenes estereoscópicas
         examples = gr.Examples(
             examples=[
-                ["./stereo_images/images_left/000015_10.png", "./stereo_images/images_right/000015_10.png"],
-                ["./stereo_images/images_left/000015_11.png", "./stereo_images/images_right/000015_11.png"],
-                ["./stereo_images/images_left/000016_10.png", "./stereo_images/images_right/000016_10.png"]
+                ["./stereo_images/images_left/000026_10.png", "./stereo_images/images_right/000026_10.png"],
+                ["./stereo_images/images_left/000028_10.png", "./stereo_images/images_right/000028_10.png"],
+                ["./stereo_images/images_left/000023_10.png", "./stereo_images/images_right/000023_10.png"]
             ],
             inputs=[image_path_left, image_path_right],
             label="Example Stereo Images",
