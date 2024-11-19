@@ -10,7 +10,7 @@ def load_detr_model():
 # Nombres de las categorías de COCO
 COCO_INSTANCE_CATEGORY_NAMES = [
     '__background__', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
-    'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign',
+    'train', 'truck', 'boat', 'fire hydrant', 'stop sign',
     'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
     'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag',
     'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite',

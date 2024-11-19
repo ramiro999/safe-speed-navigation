@@ -292,6 +292,18 @@ with gr.Blocks(theme=seafoam) as demo:
         with gr.Row():
             image_path_left = gr.Image(label="Left Image")
             image_path_right = gr.Image(label="Right Image")
+
+        # Agregar ejemplos de imágenes estereoscópicas
+        examples = gr.Examples(
+            examples=[
+                ["./stereo_images/images_left/000015_10.png", "./stereo_images/images_right/000015_10.png"],
+                ["./stereo_images/images_left/000015_11.png", "./stereo_images/images_right/000015_11.png"],
+                ["./stereo_images/images_left/000016_10.png", "./stereo_images/images_right/000016_10.png"]
+            ],
+            inputs=[image_path_left, image_path_right],
+            label="Example Stereo Images",
+        )
+
         run_button = gr.Button("Run Inference")    
         output_image = gr.Image(label="Output Image", visible=True)
         run_button.click(stereo_inference, inputs=[image_path_left, image_path_right], outputs=output_image)
@@ -315,7 +327,7 @@ with gr.Blocks(theme=seafoam) as demo:
                 turning_car = gr.Slider(0.0, 360.0, value=180.0, step=1.0, label="Turning Car [°]")
                 cog = gr.Slider(0.0, 2.0, value=1.0, step=0.01, label="Height of Center Gravity (COG) [m]")
                 wheelbase = gr.Slider(0.0, 3.0, value=1.5, step=0.01, label="Width of Wheelbase [m]")
-                selected_object_id = gr.Number(value=1, label="Selected Object ID", precision=0, interactive=True)  # Mover aquí
+                selected_object_id = gr.Number(value=1, label="Selected Object ID", precision=0, interactive=True)
 
         run_button = gr.Button("Calculate Distance")
         
