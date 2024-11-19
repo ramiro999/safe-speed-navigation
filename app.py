@@ -28,6 +28,7 @@ model = load_detr_model()
 # Variable global para almacenar la imagen de salida de Stereo Inference
 stereo_output_image = None
 image_path_left_original = None
+objects_info = []  # Almacenar los objetos detectados
 
 def save_temp_image(image_array):
     """
@@ -37,7 +38,7 @@ def save_temp_image(image_array):
     cv2.imwrite(temp_file.name, image_array)
     return temp_file.name
 
-# Función `stereo_inference()`
+# Función stereo_inference()
 def stereo_inference(image_path_left=None, image_path_right=None):
     """
     Realiza inferencia estéreo. Soporta tanto rutas de archivo como imágenes cargadas en memoria (numpy.ndarray).
@@ -78,7 +79,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
 
 # Función para detección de objetos y calcular la distancia usando la disparidad
 def object_detection_with_disparity():
-    global stereo_output_image, image_path_left_original
+    global stereo_output_image, image_path_left_original, objects_info
     if stereo_output_image is None or image_path_left_original is None:
         raise ValueError("No se ha generado una imagen de salida de Stereo Inference o no se ha proporcionado la imagen original.")
 
@@ -140,7 +141,7 @@ def object_detection_with_disparity():
     ids = [obj['id'] for obj in objects_info]
     distances = [obj['distance'] for obj in objects_info]
     fig_detr = plot_detr_results_with_distance(image, bboxes, labels, ids, distances)
-    fig_detr.savefig("object_detection_results_with_distances.png", bbox_inches="tight")
+    fig_detr.savefig("./outputs/object_detection_results_with_distances.png", bbox_inches="tight")
 
     # Crear texto de resultados
     info_text = "Objetos detectados:\n\n"
@@ -151,10 +152,21 @@ def object_detection_with_disparity():
         info_text += f"Coordenadas: ({obj['bbox'][0]}, {obj['bbox'][1]}) a ({obj['bbox'][2]}, {obj['bbox'][3]})\n"
         info_text += f"Distancia promedio: {obj['distance']:.2f} metros\n\n"
 
-    return "object_detection_results_with_distances.png", info_text
+    return "./outputs/object_detection_results_with_distances.png", info_text
 
 # Función para el cálculo de distancia (sin detección de objetos)
-def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase):
+def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_id):
+    global objects_info
+    
+    # Obtener información del objeto seleccionado
+    selected_object = next((obj for obj in objects_info if obj['id'] == selected_object_id), None)
+    if selected_object is None:
+        raise ValueError("El objeto seleccionado no es válido.")
+    
+    object_height = selected_object['height']
+    object_distance = selected_object['distance']
+    
+    # Realizar cálculos utilizando la información del objeto seleccionado
     _, plot_path1, plot_path2, plot_path3, plot_path4 = calculate_lookahead_distance(
         mu=mu,
         t=t,
@@ -163,6 +175,8 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase):
         cog=cog,
         wheelbase=wheelbase,
         turning_angle=turning_car,
+        object_height=object_height,  # Añadir la altura del objeto
+        object_distance=object_distance,  # Añadir la distancia del objeto
         image_path=None  # Si necesitas una imagen de referencia, pásala aquí
     )
     return (
@@ -233,7 +247,6 @@ with gr.Blocks(theme=seafoam) as demo:
             width: 60%;
             border-radius: 10px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            margin-top: 20px;
             text-align: center;
         }
         
@@ -269,13 +282,13 @@ with gr.Blocks(theme=seafoam) as demo:
     </style>
     """)
 
-    with gr.Tab("Inicio"):
+    with gr.Tab("Home"):
         gr.HTML("""
         <div class="title-text">
             Estimation of safe navigation speed for autonomous vehicles
         </div>
                 
-        <div style="display: flex; justify-content: center; align-items: center;">
+        <div style="display: flex; justify-content: center; align-items: center; margin-top:10px">
             <img src="https://i.ibb.co/sJrp7P4/portada.png" class="welcome-image"/>
         </div>
         """)
@@ -291,9 +304,9 @@ with gr.Blocks(theme=seafoam) as demo:
 
     with gr.Tab("Object Detection"):
         gr.Markdown("## Object Detection")
+        run_button = gr.Button("Run Detection")
         detect_output_image = gr.Image(label="Object Detection Output Image", visible=True)
         detect_output_text = gr.Textbox(label="Detected Objects Info", lines=10, interactive=False)
-        run_button = gr.Button("Run Detection")
         run_button.click(object_detection_with_disparity, outputs=[detect_output_image, detect_output_text])
 
     with gr.Tab("Calculate Distance"):
@@ -308,6 +321,7 @@ with gr.Blocks(theme=seafoam) as demo:
                 turning_car = gr.Slider(0.0, 360.0, value=180.0, step=1.0, label="Turning Car [°]")
                 cog = gr.Slider(0.0, 2.0, value=1.0, step=0.01, label="Height of Center Gravity (COG) [m]")
                 wheelbase = gr.Slider(0.0, 3.0, value=1.5, step=0.01, label="Width of Wheelbase [m]")
+                selected_object_id = gr.Number(value=1, label="Selected Object ID", precision=0, interactive=True)
 
         # Organizar las gráficas en dos filas
         with gr.Row():
@@ -319,6 +333,6 @@ with gr.Blocks(theme=seafoam) as demo:
                 distance_plot4 = gr.Image(type="filepath", label="Campo de visión instantaneo para los obstáculos", visible=False)
                 
         run_button = gr.Button("Calculate Distance")
-        run_button.click(calculate_distance, inputs=[mu, t, l, B, turning_car, cog, wheelbase], outputs=[distance_plot1, distance_plot2, distance_plot3, distance_plot4])
+        run_button.click(calculate_distance, inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_id], outputs=[distance_plot1, distance_plot2, distance_plot3, distance_plot4])
 
-demo.launch()
+demo.launch(share=True)

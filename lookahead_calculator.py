@@ -14,7 +14,7 @@ output_directory = 'outputs'
 if not os.path.exists(output_directory):
     os.makedirs(output_directory)
 
-def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, image_path=None):
+def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, object_height=None, object_distance=None, image_path=None):
     # Parámetros fijos para el modelo (algunos se han convertido en parámetros de la función)
     g = 9.81
     a = -9  # Desaceleración durante el frenado [m/s^2]
@@ -68,13 +68,13 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, ima
 
     # Variables y cálculos para la segunda gráfica (AOV)
     HFOV = np.zeros_like(v_mtps)
-    hc = 2  # Altura del centro de gravedad [m]
+    hc = cog  # Altura del centro de gravedad [m]
     thetaSlope = np.deg2rad(15)  # Ángulo de la pendiente
     thetaMin = np.arctan(hc / d_look_stop)
     thetaMax = np.arctan(hc / d_offset)
     VFOV = 2 * thetaSlope + np.minimum(thetaMin, thetaMax)
 
-    for v in range(1, 101):
+    for v in range(1, 151):
         HFOV[v - 1] = d_look_stop[v - 1] / turning[v - 1]
 
     # Generar la segunda gráfica (Angle of View)
@@ -107,9 +107,12 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, ima
     plt.savefig(plot_path3, bbox_inches="tight")
     plt.close()
 
-    # Gráfico para obstáculos positivos con diferentes alturas
+    # Gráfico de IFOV para obstáculos positivos con diferentes alturas
     stoppingDistance = np.arange(1, 1001)
-    hp_values = np.arange(0.1, 1.1, 0.1)
+    if object_height is not None:
+        hp_values = np.array([object_height])  # Usar la altura del objeto si se proporciona
+    else:
+        hp_values = np.arange(0.1, 1.1, 0.1)  # Usar valores por defecto si no se proporciona la altura del objeto
     IFOVp = np.zeros((len(hp_values), len(stoppingDistance)))
 
     for i, hp in enumerate(hp_values):
