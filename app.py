@@ -326,11 +326,11 @@ with gr.Blocks(theme=seafoam) as demo:
         # Organizar las gráficas en dos filas
         with gr.Row():
             with gr.Column():
-                distance_plot1 = gr.Image(type="filepath", label="Gráfica de distancia segura", visible=False)
-                distance_plot3 = gr.Image(type="filepath", label="Campo de visión Instantaneo Positivo [miliradianes]", visible=False)
+                distance_plot1 = gr.Image(type="filepath", label="1", visible=False)
+                distance_plot3 = gr.Image(type="filepath", label="2", visible=False)
             with gr.Column():
-                distance_plot2 = gr.Image(type="filepath", label="Gráfica del ángulo de visión", visible=False)
-                distance_plot4 = gr.Image(type="filepath", label="Campo de visión instantaneo para los obstáculos", visible=False)
+                distance_plot2 = gr.Image(type="filepath", label="3", visible=False)
+                distance_plot4 = gr.Image(type="filepath", label="4", visible=False)
                 
         run_button = gr.Button("Calculate Distance")
         run_button.click(calculate_distance, inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_id], outputs=[distance_plot1, distance_plot2, distance_plot3, distance_plot4])
