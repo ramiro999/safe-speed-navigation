@@ -154,20 +154,19 @@ def object_detection_with_disparity():
 
     return "./outputs/object_detection_results_with_distances.png", info_text
 
-# Función para el cálculo de distancia (sin detección de objetos)
+# Función para el cálculo de distancia utilizando gráficos interactivos de Plotly
 def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_id):
     global objects_info
-    
+
     # Obtener información del objeto seleccionado
     selected_object = next((obj for obj in objects_info if obj['id'] == selected_object_id), None)
     if selected_object is None:
         raise ValueError("El objeto seleccionado no es válido.")
-    
+
     object_height = selected_object['height']
     object_distance = selected_object['distance']
-    
-    # Realizar cálculos utilizando la información del objeto seleccionado
-    _, plot_path1, plot_path2, plot_path3, plot_path4 = calculate_lookahead_distance(
+
+    fig1, fig2, fig3, fig4 = calculate_lookahead_distance(
         mu=mu,
         t=t,
         l=l,
@@ -175,16 +174,11 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object
         cog=cog,
         wheelbase=wheelbase,
         turning_angle=turning_car,
-        object_height=object_height,  # Añadir la altura del objeto
-        object_distance=object_distance,  # Añadir la distancia del objeto
-        image_path=None  # Si necesitas una imagen de referencia, pásala aquí
+        object_height=object_height,
+        object_distance=object_distance,
+        image_path=None
     )
-    return (
-        gr.update(value=plot_path1, visible=True),
-        gr.update(value=plot_path2, visible=True),
-        gr.update(value=plot_path3, visible=True),
-        gr.update(value=plot_path4, visible=True)
-    )
+    return fig1, fig2, fig3, fig4
 
 # Diseño de la interfaz de Gradio
 class Seafoam(Base):
@@ -298,8 +292,8 @@ with gr.Blocks(theme=seafoam) as demo:
         with gr.Row():
             image_path_left = gr.Image(label="Left Image")
             image_path_right = gr.Image(label="Right Image")
-        output_image = gr.Image(label="Output Image", visible=False)
-        run_button = gr.Button("Run Inference")
+        run_button = gr.Button("Run Inference")    
+        output_image = gr.Image(label="Output Image", visible=True)
         run_button.click(stereo_inference, inputs=[image_path_left, image_path_right], outputs=output_image)
 
     with gr.Tab("Object Detection"):
@@ -321,18 +315,19 @@ with gr.Blocks(theme=seafoam) as demo:
                 turning_car = gr.Slider(0.0, 360.0, value=180.0, step=1.0, label="Turning Car [°]")
                 cog = gr.Slider(0.0, 2.0, value=1.0, step=0.01, label="Height of Center Gravity (COG) [m]")
                 wheelbase = gr.Slider(0.0, 3.0, value=1.5, step=0.01, label="Width of Wheelbase [m]")
-                selected_object_id = gr.Number(value=1, label="Selected Object ID", precision=0, interactive=True)
+                selected_object_id = gr.Number(value=1, label="Selected Object ID", precision=0, interactive=True)  # Mover aquí
 
+        run_button = gr.Button("Calculate Distance")
+        
         # Organizar las gráficas en dos filas
         with gr.Row():
             with gr.Column():
-                distance_plot1 = gr.Image(type="filepath", label="1", visible=False)
-                distance_plot3 = gr.Image(type="filepath", label="2", visible=False)
+                distance_plot1 = gr.Plot(label="Lookahead Distance for Stopping and Swerving")
+                distance_plot3 = gr.Plot(label="IFOV Positive Obstacle")
             with gr.Column():
-                distance_plot2 = gr.Image(type="filepath", label="3", visible=False)
-                distance_plot4 = gr.Image(type="filepath", label="4", visible=False)
+                distance_plot2 = gr.Plot(label="Angle of View (AOV)")
+                distance_plot4 = gr.Plot(label="Positive Obstacle IFOV")
                 
-        run_button = gr.Button("Calculate Distance")
         run_button.click(calculate_distance, inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_id], outputs=[distance_plot1, distance_plot2, distance_plot3, distance_plot4])
 
 demo.launch(share=True)

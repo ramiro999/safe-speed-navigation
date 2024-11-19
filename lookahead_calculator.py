@@ -1,18 +1,12 @@
+# lookahead_calculator.py:
 import numpy as np
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import torch
 from detr.image_processing import preprocess_image, plot_detr_results
 from detr.model_loader import load_detr_model
-import os
-from matplotlib import cm
 
 # Cargar el modelo (si es necesario para procesamiento adicional)
 model = load_detr_model()
-
-# Asegurarse de que exista el directorio de salida
-output_directory = 'outputs'
-if not os.path.exists(output_directory):
-    os.makedirs(output_directory)
 
 def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, object_height=None, object_distance=None, image_path=None):
     # Parámetros fijos para el modelo (algunos se han convertido en parámetros de la función)
@@ -52,19 +46,19 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         d_swerve[v - 1] = np.real(np.sqrt(turning[v - 1] ** 2 - (turning[v - 1] - w) ** 2))
         d_look_swerve[v - 1] = d_offset + d_per[v - 1] + d_act[v - 1] + d_swerve[v - 1]
 
-    # Generar la primera gráfica (Lookahead Distance)
-    plt.figure(figsize=(10, 6))
-    plt.plot(v_kph, d_look_stop, linewidth=2, label='Stopping Distance [m]')
-    plt.plot(v_kph, d_look_swerve, linewidth=2, label='Swerve Distance [m]')
-    plt.grid(True)
-    plt.xlabel('Vehicle speed [kph]')
-    plt.ylabel('Lookahead distance [m]')
-    plt.ylim(0, 800)
-    plt.legend()
-    plt.tight_layout()
-    plot_path1 = os.path.join('outputs', 'Lookahead_Distance_For_Stopping_Distance(kph).png')
-    plt.savefig(plot_path1, bbox_inches="tight")
-    plt.close()
+    # Gráfico interactivo 1: Lookahead Distance
+    fig1 = go.Figure()
+    fig1.add_trace(go.Scatter(x=v_kph, y=d_look_stop, mode='lines', name='Stopping Distance [m]', line=dict(color='aqua', width=3)))
+    fig1.add_trace(go.Scatter(x=v_kph, y=d_look_swerve, mode='lines', name='Swerve Distance [m]', line=dict(color='orange', width=3)))
+    fig1.update_layout(
+        title='Lookahead Distance for Stopping and Swerving',
+        xaxis_title='Vehicle speed [kph]',
+        yaxis_title='Lookahead distance [m]',
+        yaxis=dict(range=[0, 800]),
+        paper_bgcolor='rgba(0,0,0,0)',  # Fondo transparente
+        plot_bgcolor='rgba(0,0,0,0)',    # Fondo del plot transparente
+        font=dict(color='white')         # Texto en blanco para mejor contraste
+    )
 
     # Variables y cálculos para la segunda gráfica (AOV)
     HFOV = np.zeros_like(v_mtps)
@@ -77,79 +71,81 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     for v in range(1, 151):
         HFOV[v - 1] = d_look_stop[v - 1] / turning[v - 1]
 
-    # Generar la segunda gráfica (Angle of View)
-    plt.figure(figsize=(10, 6))
-    plt.plot(v_kph, HFOV * 1e3, linewidth=2, label='HAOV [miliradians]')
-    plt.plot(v_kph, VFOV * 1e3, linewidth=2, label='VAOV [miliradians]')
-    plt.xlabel('Vehicle speed [kph]')
-    plt.ylabel('Angle of View (AOV) [miliradians]')
-    plt.title('Angle of View (AOV) vs Vehicle Speed')
-    plt.grid()
-    plt.legend()
-    plot_path2 = os.path.join('outputs', 'HFOV_VFOV_Miliradians.png')
-    plt.savefig(plot_path2, bbox_inches="tight")
-    plt.close()
+    # Gráfico interactivo 2: Angle of View (AOV)
+    fig2 = go.Figure()
+    fig2.add_trace(go.Scatter(x=v_kph, y=HFOV * 1e3, mode='lines', name='HAOV [miliradians]', line=dict(color='lime', width=3)))
+    fig2.add_trace(go.Scatter(x=v_kph, y=VFOV * 1e3, mode='lines', name='VAOV [miliradians]', line=dict(color='red', width=3)))
+    fig2.update_layout(
+        title='Angle of View (AOV) vs Vehicle Speed',
+        xaxis_title='Vehicle speed [kph]',
+        yaxis_title='Angle of View (AOV) [miliradians]',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='white')
+    )
 
-    # Gráfico de IFOV para obstáculos positivos
+    # Gráfico interactivo 3: IFOV para obstáculos positivos
     hp = 0.1  # Altura del obstáculo positivo
     IFOVp = np.arctan(hc / d_look_stop) - np.arctan((hc - hp) / d_look_stop)
 
-    plt.figure()
-    plt.plot(v_kph, (IFOVp * 10 ** 3), linewidth=2, label='IFOV Positive [miliradians]')
-    plt.xlabel('Vehicle speed [kph]')
-    plt.ylabel('Instantaneous Field of View [miliradians]')
-    plt.title('Instantaneous Field of View vs Vehicle Speed')
-    plt.grid()
-    plt.legend()
-    plt.xscale('log')
-    plt.yscale('log')
-    plot_path3 = os.path.join('outputs', 'IFOV_Miliradians.png')
-    plt.savefig(plot_path3, bbox_inches="tight")
-    plt.close()
+    fig3 = go.Figure()
+    fig3.add_trace(go.Scatter(x=v_kph, y=IFOVp * 1e3, mode='lines', name='IFOV Positive [miliradians]', line=dict(color='magenta', width=3)))
+    fig3.update_layout(
+        title='Instantaneous Field of View vs Vehicle Speed',
+        xaxis_title='Vehicle speed [kph]',
+        yaxis_title='Instantaneous Field of View [miliradians]',
+        xaxis=dict(
+            type='log',
+            range=[0, 3],  # Rango adecuado para mostrar velocidades entre 1 a 1000 (en logaritmo base 10)
+            dtick=1  # Espaciado claro para las etiquetas
+        ),
+        yaxis=dict(
+            type='log',
+            range=[-1, 3],  # Ajustar para que la escala muestre bien los valores
+            dtick=1  # Espaciado claro para las etiquetas en escala logarítmica
+        ),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='white')
+    )
 
-    # Gráfico de IFOV para obstáculos positivos con diferentes alturas
-    stoppingDistance = np.arange(1, 1001)
+    # Gráfico interactivo 4: IFOV para obstáculos positivos con diferentes alturas
+    looakheadDistance = np.arange(1, 1001)
     if object_height is not None:
         hp_values = np.array([object_height])  # Usar la altura del objeto si se proporciona
     else:
         hp_values = np.arange(0.1, 1.1, 0.1)  # Usar valores por defecto si no se proporciona la altura del objeto
-    IFOVp = np.zeros((len(hp_values), len(stoppingDistance)))
+    IFOVp = np.zeros((len(hp_values), len(looakheadDistance)))
 
     for i, hp in enumerate(hp_values):
-        IFOVp[i, :] = np.arctan(hc / stoppingDistance) - np.arctan((hc - hp) / stoppingDistance)
+        IFOVp[i, :] = np.arctan(hc / looakheadDistance) - np.arctan((hc - hp) / looakheadDistance)
 
-    plt.figure()
-    colors = cm.get_cmap('viridis', len(hp_values))
+    fig4 = go.Figure()
     for i, hp in enumerate(hp_values):
-        plt.plot(stoppingDistance, IFOVp[i, :] * 10 ** 3, color=colors(i), linewidth=2)
+        fig4.add_trace(go.Scatter(x=looakheadDistance, y=IFOVp[i, :] * 1e3, mode='lines', name=f'Object Height: {hp:.1f} m', line=dict(width=3)))
 
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.grid(True, which="both", linestyle="--", alpha=0.5)
-    plt.title('Positive Obstacle IFOV')
-    plt.xlabel('Sensor distance to the scene [m]')
-    plt.ylabel('IFOV [milliradians]')
-    plt.ylim([10 ** -4, 10 ** 3])
-    hp_labels = [f'{h:.1f}' for h in hp_values]
-    plt.legend(hp_labels, title="Object size [m]", loc='lower left')
-    plt.tight_layout()
-    plot_path4 = os.path.join('outputs', 'Positive_Obstacle_IFOV.png')
-    plt.savefig(plot_path4, bbox_inches="tight")
-    plt.close()
+    # Añadir una leyenda personalizada para la altura del objeto seleccionado
+    if object_height is not None:
+        fig4.add_trace(go.Scatter(
+            x=[1], y=[2], mode='text', name='Object Height',
+            text=[f'Object Height: {object_height:.2f} m'],
+            textposition='top right',
+            showlegend=False
+        ))
 
-    # Detección opcional si se proporciona una imagen
-    if image_path is not None:
-        image, image_tensor = preprocess_image(image_path)
-        with torch.no_grad():
-            outputs = model(image_tensor)
+    # Actualizar diseño de la gráfica para una mejor visualización
+    fig4.update_layout(
+        title='Positive Obstacle IFOV',
+        xaxis_title='Sensor distance to the scene [m]',
+        yaxis_title='IFOV [milliradians]',
+        xaxis_type='log',
+        yaxis_type='log',
+        xaxis=dict(dtick=1, title=dict(standoff=20)),
+        yaxis=dict(dtick=1, title=dict(standoff=20), range=[-1, 3.5]),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='white')
+    )
 
-        probas = outputs['pred_logits'].softmax(-1)[0, :, :-1]
-        keep = probas.max(-1).values > 0.8
-
-        bboxes = outputs['pred_boxes'][0, keep].numpy()
-        labels = probas[keep].argmax(-1).numpy()
-
-        fig_detr = plot_detr_results(image, bboxes, labels)
-        return fig_detr, plot_path1, plot_path2, plot_path3, plot_path4
-
-    return None, plot_path1, plot_path2, plot_path3, plot_path4
+    # Retornar las gráficas interactuables de Plotly
+    return fig1, fig2, fig3, fig4
