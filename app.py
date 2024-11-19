@@ -296,9 +296,9 @@ with gr.Blocks(theme=seafoam) as demo:
         # Agregar ejemplos de imágenes estereoscópicas
         examples = gr.Examples(
             examples=[
-                ["./examples/left_image1.png", "./examples/right_image1.png"],
-                ["./examples/left_image2.png", "./examples/right_image2.png"],
-                ["./examples/left_image3.png", "./examples/right_image3.png"]
+                ["./stereo_images/images_left/000026_10.png", "./stereo_images/images_right/000026_10.png"],
+                ["./stereo_images/images_left/000028_10.png", "./stereo_images/images_right/000028_10.png"],
+                ["./stereo_images/images_left/000023_10.png", "./stereo_images/images_right/000023_10.png"]
             ],
             inputs=[image_path_left, image_path_right],
             label="Example Stereo Images",
@@ -319,10 +319,10 @@ with gr.Blocks(theme=seafoam) as demo:
         gr.Markdown("## Safe distance calculation section")
         with gr.Row():
             with gr.Column():
-                mu = gr.Slider(0.0, 1.0, value=0.3, step=0.01, label="Coeficiente de fricción (mu)")
-                t = gr.Slider(0.0, 5.0, value=0.2, step=0.01, label="Tiempo de percepción (t) [s]")
-                l = gr.Slider(0.0, 5.0, value=0.25, step=0.01, label="Latencia (l) [s]")
-                B = gr.Slider(0.0, 5.0, value=2.0, step=0.1, label="Buffer (B) [m]")
+                mu = gr.Slider(0.0, 1.0, value=0.3, step=0.01, label="Coeficcient of friction (mu)")
+                t = gr.Slider(0.0, 5.0, value=0.2, step=0.01, label="Perception time (t) [s]")
+                l = gr.Slider(0.0, 5.0, value=0.25, step=0.01, label="Latency (l) [s]")
+                B = gr.Slider(0.0, 5.0, value=2.0, step=0.1, label="Buffer distance (B) [m]")
             with gr.Column():
                 turning_car = gr.Slider(0.0, 20.0, value=10.0, step=1.0, label="Turning Car [°]")
                 cog = gr.Slider(0.0, 2.0, value=0.5, step=0.01, label="Height of Center Gravity (COG) [m]")
