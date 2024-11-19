@@ -226,6 +226,16 @@ with gr.Blocks(theme=seafoam) as demo:
             text-align: center;
             margin-top: 10px;
         }
+            
+        .welcome-image {
+            display: block;
+            margin: 0 auto;
+            width: 60%;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+            text-align: center;
+        }
         
         @media (max-width: 768px) {
             .title-text {
@@ -260,16 +270,13 @@ with gr.Blocks(theme=seafoam) as demo:
     """)
 
     with gr.Tab("Inicio"):
-        gr.HTML("""""
+        gr.HTML("""
         <div class="title-text">
-            Estimación de la velocidad de navegación segura para vehículos autónomos utilizando técnicas de visión por computadora
+            Estimation of safe navigation speed for autonomous vehicles
         </div>
-        <div>
-            <img src="https://www.gradio.app/static/landing/img/hero.png" class="welcome-image" />
-        </div>
-        
-        <div class="description-text">
-            <p>...</p>
+                
+        <div style="display: flex; justify-content: center; align-items: center;">
+            <img src="https://i.ibb.co/sJrp7P4/portada.png" class="welcome-image"/>
         </div>
         """)
 
