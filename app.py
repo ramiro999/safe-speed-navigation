@@ -276,16 +276,13 @@ with gr.Blocks(theme=seafoam) as demo:
     </style>
     """)
 
-    with gr.Tab("Home"):
-        gr.HTML("""
-        <div class="title-text">
-            Estimation of safe navigation speed for autonomous vehicles
-        </div>
-                
-        <div style="display: flex; justify-content: center; align-items: center; margin-top:10px">
-            <img src="https://i.ibb.co/sJrp7P4/portada.png" class="welcome-image"/>
-        </div>
-        """)
+    gr.HTML("""
+    <div class="title-text" style="display: inline-flex; align-items: center;">
+        <img src="https://i.ibb.co/v10hH1k/icons8-autonomous-vehicles-96.png" alt="Icon" style="width: 50px; vertical-align: middle; margin-left: 10px;">
+        <span> Estimation of safe navigation speed for autonomous vehicles </span>
+        <img src="https://i.ibb.co/v10hH1k/icons8-autonomous-vehicles-96.png" alt="Icon" style="width: 50px; vertical-align: middle; margin-left: 10px;">
+    </div>
+    """)
 
     with gr.Tab("Stereo Inference"):
         gr.Markdown("## Stereo Inference")
@@ -352,6 +349,11 @@ with gr.Blocks(theme=seafoam) as demo:
                 distance_plot4 = gr.Plot(label="Positive Obstacle IFOV")
                 
         run_button.click(calculate_distance, inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_id], outputs=[distance_plot1, distance_plot2, distance_plot3, distance_plot4])
+
+    with gr.Tab("Decision"):
+        gr.Markdown("## Decision Making")
+        gr.Row("")
+
 
 
 demo.launch(share=True)
