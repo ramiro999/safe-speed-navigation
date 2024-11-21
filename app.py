@@ -112,6 +112,7 @@ def object_detection_with_disparity():
 
     # Procesar información de objetos detectados
     objects_info = []
+    cards_html = ""  # Variable para almacenar HTML de las tarjetas mejoradas
     for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):
         cx, cy, w, h = bbox
         x0, y0 = int((cx - w / 2) * image.shape[1]), int((cy - h / 2) * image.shape[0])
@@ -137,34 +138,45 @@ def object_detection_with_disparity():
             'distance': avg_distance
         })
 
+        # Crear tarjeta HTML mejorada para el objeto detectado
+        cards_html += f"""
+        <div style="background-color: #2c2f33; color: #ffffff; border-radius: 10px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+            <h3 style="margin-bottom: 10px; display: flex; align-items: center;">
+                <img src="https://img.icons8.com/color/48/000000/car--v1.png" alt="Object Icon" style="width: 35px; height: 35px; margin-right: 10px;"> Object ID: {idx}
+            </h3>
+            <p style="margin: 5px 0;"><strong>Class:</strong> {COCO_INSTANCE_CATEGORY_NAMES[label]}</p>
+            <p style="margin: 5px 0;"><strong>Height:</strong> {height_bb} pixels</p>
+            <p style="margin: 5px 0;"><strong>Coordinates:</strong> ({x0}, {y0}) to ({x1}, {y1})</p>
+            <p style="margin: 5px 0;"><strong>Average Distance:</strong> {avg_distance:.2f} meters</p>
+        </div>
+        """
+
     # Visualizar y guardar resultados
     ids = [obj['id'] for obj in objects_info]
     distances = [obj['distance'] for obj in objects_info]
     fig_detr = plot_detr_results_with_distance(image, bboxes, labels, ids, distances)
     fig_detr.savefig("./outputs/object_detection_results_with_distances.png", bbox_inches="tight")
 
-    # Crear texto de resultados
-    info_text = "Objetos detectados:\n\n"
-    for obj in objects_info:
-        info_text += f"ID: {obj['id']}\n"
-        info_text += f"Clase: {obj['class']}\n"
-        info_text += f"Altura objeto: {obj['height']:,} píxeles\n"
-        info_text += f"Coordenadas: ({obj['bbox'][0]}, {obj['bbox'][1]}) a ({obj['bbox'][2]}, {obj['bbox'][3]})\n"
-        info_text += f"Distancia promedio: {obj['distance']:.2f} metros\n\n"
+    return "./outputs/object_detection_results_with_distances.png", cards_html
 
-    return "./outputs/object_detection_results_with_distances.png", info_text
+
 
 # Función para el cálculo de distancia utilizando gráficos interactivos de Plotly
-def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_id):
+def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids):
     global objects_info
 
-    # Obtener información del objeto seleccionado
-    selected_object = next((obj for obj in objects_info if obj['id'] == selected_object_id), None)
-    if selected_object is None:
-        raise ValueError("El objeto seleccionado no es válido.")
+    # Asegurarse de que se seleccionen objetos
+    if not selected_object_ids:
+        raise ValueError("Debe seleccionar al menos un objeto para calcular la distancia.")
 
-    object_height = selected_object['height']
-    object_distance = selected_object['distance']
+    # Filtrar los objetos seleccionados
+    selected_objects = [obj for obj in objects_info if obj['id'] in selected_object_ids]
+    if not selected_objects:
+        raise ValueError("Ninguno de los objetos seleccionados es válido.")
+
+    # Calcular la altura y distancia promedio de los objetos seleccionados
+    avg_height = np.mean([obj['height'] for obj in selected_objects])
+    avg_distance = np.mean([obj['distance'] for obj in selected_objects])
 
     fig1, fig2, fig3, fig4 = calculate_lookahead_distance(
         mu=mu,
@@ -174,11 +186,92 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object
         cog=cog,
         wheelbase=wheelbase,
         turning_angle=turning_car,
-        object_height=object_height,
-        object_distance=object_distance,
+        object_height=avg_height,
+        object_distance=avg_distance,
         image_path=None
     )
     return fig1, fig2, fig3, fig4
+
+
+# Nueva función para generar la gráfica para la pestaña "Decision"
+def generate_decision_graph(mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids):
+    global objects_info
+
+    # Asegurarse de que se seleccionen objetos
+    if not selected_object_ids:
+        raise ValueError("Debe seleccionar al menos un objeto para calcular la gráfica de decisión.")
+
+    # Filtrar los objetos seleccionados
+    selected_objects = [obj for obj in objects_info if obj['id'] in selected_object_ids]
+    if not selected_objects:
+        raise ValueError("Ninguno de los objetos seleccionados es válido.")
+
+    # Calcular la altura y distancia promedio de los objetos seleccionados
+    avg_height = np.mean([obj['height'] for obj in selected_objects])
+    avg_distance = np.mean([obj['distance'] for obj in selected_objects])
+
+    # Solo devolver la primera gráfica fig1
+    fig1, _, _, _ = calculate_lookahead_distance(
+        mu=mu,
+        t=t,
+        l=l,
+        B=B,
+        cog=cog,
+        wheelbase=wheelbase,
+        turning_angle=turning_car,
+        object_height=avg_height,
+        object_distance=avg_distance,
+        image_path=None
+    )
+    return fig1
+
+
+# Nueva función para el chatbot LLM sobre la gráfica
+def chatbot_response(messages, mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids):
+    global objects_info
+
+    # Extraer la última pregunta del usuario
+    user_question = messages[-1][0] if messages else ""
+
+    # Obtener datos de la gráfica si hay objetos seleccionados
+    if not selected_object_ids:
+        return messages + [("Debe seleccionar al menos un objeto para responder preguntas sobre la gráfica.", "bot")]
+
+    # Filtrar los objetos seleccionados
+    selected_objects = [obj for obj in objects_info if obj['id'] in selected_object_ids]
+    if not selected_objects:
+        return messages + [("Ninguno de los objetos seleccionados es válido.", "bot")]
+
+    # Calcular la altura y distancia promedio de los objetos seleccionados
+    avg_height = np.mean([obj['height'] for obj in selected_objects])
+    avg_distance = np.mean([obj['distance'] for obj in selected_objects])
+
+    # Generar gráfica fig1 utilizando los valores proporcionados
+    fig1, _, _, _ = calculate_lookahead_distance(
+        mu=mu,
+        t=t,
+        l=l,
+        B=B,
+        cog=cog,
+        wheelbase=wheelbase,
+        turning_angle=turning_car,
+        object_height=avg_height,
+        object_distance=avg_distance,
+        image_path=None
+    )
+
+    # Responder preguntas basadas en la gráfica y los datos de entrada
+    if "distance" in user_question.lower():
+        response = f"La distancia de frenado promedio para los objetos seleccionados es {avg_distance:.2f} metros."
+    elif "height" in user_question.lower():
+        response = f"La altura promedio de los objetos seleccionados es {avg_height:.2f} píxeles."
+    elif "lookahead" in user_question.lower() or "gráfico" in user_question.lower():
+        response = "El gráfico generado muestra la distancia de visión hacia adelante para detenerse o esquivar obstáculos, basada en la velocidad del vehículo y otros parámetros proporcionados."
+    else:
+        response = "Actualmente puedo responder preguntas sobre la distancia de frenado, la altura del objeto, y el gráfico de Lookahead Distance. Por favor, reformule su pregunta si es posible."
+
+    # Agregar respuesta del chatbot a la conversación
+    return messages + [(response, "bot")]
 
 # Diseño de la interfaz de Gradio
 class Seafoam(Base):
@@ -278,7 +371,7 @@ with gr.Blocks(theme=seafoam) as demo:
 
     gr.HTML("""
     <div class="title-text" style="display: inline-flex; align-items: center;">
-        <img src="https://i.ibb.co/v10hH1k/icons8-autonomous-vehicles-96.png" alt="Icon" style="width: 50px; vertical-align: middle; margin-left: 10px;">
+        <img src="https://i.ibb.co/v10hH1k/icons8-autonomous-vehicles-96.png" alt="Icon" style="width: 50px; vertical-align: middle; margin-right: 10px;">
         <span> Estimation of safe navigation speed for autonomous vehicles </span>
         <img src="https://i.ibb.co/v10hH1k/icons8-autonomous-vehicles-96.png" alt="Icon" style="width: 50px; vertical-align: middle; margin-left: 10px;">
     </div>
@@ -309,14 +402,15 @@ with gr.Blocks(theme=seafoam) as demo:
         gr.Markdown("## Object Detection")
         run_button = gr.Button("Run Detection")
         detect_output_image = gr.Image(label="Object Detection Output Image", visible=True)
-        detect_output_text = gr.Textbox(label="Detected Objects Info", lines=10, interactive=False)
-        run_button.click(object_detection_with_disparity, outputs=[detect_output_image, detect_output_text])
+        cards_placeholder = gr.HTML(label="Detected Objects Info", visible=True)  # Placeholder for object cards
+    
+    run_button.click(object_detection_with_disparity, outputs=[detect_output_image, cards_placeholder])
 
     with gr.Tab("Calculate Distance"):
         gr.Markdown("## Safe distance calculation section")
         with gr.Row():
             with gr.Column():
-                mu = gr.Slider(0.0, 1.0, value=0.3, step=0.01, label="Coeficcient of friction (mu)")
+                mu = gr.Slider(0.0, 1.0, value=0.3, step=0.01, label="Coefficient of friction (mu)")
                 t = gr.Slider(0.0, 5.0, value=0.2, step=0.01, label="Perception time (t) [s]")
                 l = gr.Slider(0.0, 5.0, value=0.25, step=0.01, label="Latency (l) [s]")
                 B = gr.Slider(0.0, 5.0, value=2.0, step=0.1, label="Buffer distance (B) [m]")
@@ -324,8 +418,12 @@ with gr.Blocks(theme=seafoam) as demo:
                 turning_car = gr.Slider(0.0, 20.0, value=10.0, step=1.0, label="Turning Car [°]")
                 cog = gr.Slider(0.0, 2.0, value=0.5, step=0.01, label="Height of Center Gravity (COG) [m]")
                 wheelbase = gr.Slider(0.0, 3.0, value=1.5, step=0.01, label="Width of Wheelbase [m]")
-                selected_object_id = gr.Number(value=1, label="Selected Object ID", precision=0, interactive=True)
-
+                
+                # Crear CheckboxGroup para seleccionar los objetos detectados
+                selected_object_ids = gr.CheckboxGroup(label="Select Object(s) by ID", choices=[], interactive=True)
+                # Botón para cargar los objetos detectados
+                load_button = gr.Button("Load Object Heights")
+                
         # Agregar ejemplos de vehículos para calcular la distancia
         examples = gr.Examples(
             examples=[
@@ -348,11 +446,40 @@ with gr.Blocks(theme=seafoam) as demo:
                 distance_plot2 = gr.Plot(label="Angle of View (AOV)")
                 distance_plot4 = gr.Plot(label="Positive Obstacle IFOV")
                 
-        run_button.click(calculate_distance, inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_id], outputs=[distance_plot1, distance_plot2, distance_plot3, distance_plot4])
+        # Conectar la función calculate_distance con los componentes de entrada/salida
+        run_button.click(calculate_distance, inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids], outputs=[distance_plot1, distance_plot2, distance_plot3, distance_plot4])
+
+        # Acción del botón "Load Object Heights" para actualizar las opciones del CheckboxGroup
+        load_button.click(
+            fn=lambda: gr.update(choices=[obj['id'] for obj in objects_info]),
+            inputs=None,
+            outputs=selected_object_ids,
+        )
 
     with gr.Tab("Decision"):
         gr.Markdown("## Decision Making")
-        gr.Row("")
+        decision_plot = gr.Plot(label="Lookahead Distance for Stopping and Swerving (Decision)")
+        
+        # Botón para generar la gráfica de decisión
+        decision_button = gr.Button("Generate Decision Graph")
+        
+        # Conectar el botón "Generate Decision Graph" con la función generate_decision_graph
+        decision_button.click(
+            generate_decision_graph,
+            inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids],
+            outputs=decision_plot,
+        )
+        
+        # Agregar un chatbot para preguntas sobre la gráfica de decisión
+        chatbot = gr.Chatbot(label="Ask about the Decision Graph")
+        chatbot_input = gr.Textbox(label="Your Question")
+        send_button = gr.Button("Send Question")
+        
+        send_button.click(
+            fn=chatbot_response,
+            inputs=[chatbot, mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids],
+            outputs=chatbot,
+        )
 
 
 
