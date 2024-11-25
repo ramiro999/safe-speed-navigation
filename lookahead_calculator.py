@@ -149,3 +149,92 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
     # Retornar las gráficas interactuables de Plotly
     return fig1, fig2, fig3, fig4
+
+def generate_decision_graph(mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids, objects_info):
+    # Ensure some objects are selected
+    if not selected_object_ids:
+        raise ValueError("Please select at least one object.")
+
+    # Filter selected objects
+    selected_objects = [obj for obj in objects_info if obj['id'] in selected_object_ids]
+
+    if not selected_objects:
+        raise ValueError("No valid objects selected.")
+
+    # Calculate average height and distance of selected objects
+    avg_height = np.mean([obj['height'] for obj in selected_objects])
+    avg_distance = np.mean([obj['distance'] for obj in selected_objects])
+
+    # Calculate decision graph using lookahead distance function
+    fig1, fig2, fig3, fig4 = calculate_lookahead_distance(
+        mu=mu,
+        t=t,
+        l=l,
+        B=B,
+        cog=cog,
+        wheelbase=wheelbase,
+        turning_angle=turning_car,
+        object_height=avg_height,
+        object_distance=avg_distance,
+        image_path=None
+    )
+
+    # Create a new figure for the decision graph
+    fig5 = go.Figure()
+
+    # Add traces from stopping and swerving distances
+    for trace in fig1.data:
+        fig5.add_trace(trace)
+
+    # Extract AOV and IFOV traces
+    haov_trace = fig2.data[0]  # HAOV
+    vaov_trace = fig2.data[1]  # VAOV
+    ifov_trace = fig3.data[0]  # IFOV Positive
+
+    # Add AOV and IFOV traces
+    fig5.add_trace(go.Scatter(
+        x=haov_trace.x,
+        y=haov_trace.y,
+        mode='lines',
+        name='HAOV [miliradians]',
+        line=dict(color='lime', width=2, dash='dash')
+    ))
+
+    fig5.add_trace(go.Scatter(
+        x=vaov_trace.x,
+        y=vaov_trace.y,
+        mode='lines',
+        name='VAOV [miliradians]',
+        line=dict(color='red', width=2, dash='dash')
+    ))
+
+    fig5.add_trace(go.Scatter(
+        x=ifov_trace.x,
+        y=ifov_trace.y,
+        mode='lines',
+        name='IFOV Positive [miliradians]',
+        line=dict(color='magenta', width=2, dash='dot')
+    ))
+
+    # Update layout
+    fig5.update_layout(
+        title='Lookahead Distance for Stopping, Swerving, and Field of View',
+        xaxis_title='Vehicle speed [km/h]',
+        yaxis_title='Lookahead distance / FOV [m / miliradians]',
+        yaxis=dict(range=[0, 800]),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='white'),
+        legend=dict(
+            x=0.01,
+            y=1,
+            bgcolor='rgba(0, 0, 0, 0)',
+            bordercolor='rgba(0, 0, 0, 0)',
+            font=dict(color='white')
+        )
+    )
+
+    return fig5
+
+
+

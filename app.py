@@ -21,6 +21,7 @@ from detr.image_processing import preprocess_image, plot_detr_results_with_dista
 from detr.model_loader import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
 from stereo.NMRF.inference import run_inference
 from stereo.NMRF.nmrf.utils.frame_utils import readDepthVKITTI
+from lookahead_calculator import generate_decision_graph
 
 # Cargar el modelo DETR
 model = load_detr_model()
@@ -160,7 +161,6 @@ def object_detection_with_disparity():
     return "./outputs/object_detection_results_with_distances.png", cards_html
 
 
-
 # Función para el cálculo de distancia utilizando gráficos interactivos de Plotly
 def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids):
     global objects_info
@@ -192,86 +192,6 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object
     )
     return fig1, fig2, fig3, fig4
 
-
-# Nueva función para generar la gráfica para la pestaña "Decision"
-def generate_decision_graph(mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids):
-    global objects_info
-
-    # Asegurarse de que se seleccionen objetos
-    if not selected_object_ids:
-        raise ValueError("Debe seleccionar al menos un objeto para calcular la gráfica de decisión.")
-
-    # Filtrar los objetos seleccionados
-    selected_objects = [obj for obj in objects_info if obj['id'] in selected_object_ids]
-    if not selected_objects:
-        raise ValueError("Ninguno de los objetos seleccionados es válido.")
-
-    # Calcular la altura y distancia promedio de los objetos seleccionados
-    avg_height = np.mean([obj['height'] for obj in selected_objects])
-    avg_distance = np.mean([obj['distance'] for obj in selected_objects])
-
-    # Solo devolver la primera gráfica fig1
-    fig1, _, _, _ = calculate_lookahead_distance(
-        mu=mu,
-        t=t,
-        l=l,
-        B=B,
-        cog=cog,
-        wheelbase=wheelbase,
-        turning_angle=turning_car,
-        object_height=avg_height,
-        object_distance=avg_distance,
-        image_path=None
-    )
-    return fig1
-
-
-# Nueva función para el chatbot LLM sobre la gráfica
-def chatbot_response(messages, mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids):
-    global objects_info
-
-    # Extraer la última pregunta del usuario
-    user_question = messages[-1][0] if messages else ""
-
-    # Obtener datos de la gráfica si hay objetos seleccionados
-    if not selected_object_ids:
-        return messages + [("Debe seleccionar al menos un objeto para responder preguntas sobre la gráfica.", "bot")]
-
-    # Filtrar los objetos seleccionados
-    selected_objects = [obj for obj in objects_info if obj['id'] in selected_object_ids]
-    if not selected_objects:
-        return messages + [("Ninguno de los objetos seleccionados es válido.", "bot")]
-
-    # Calcular la altura y distancia promedio de los objetos seleccionados
-    avg_height = np.mean([obj['height'] for obj in selected_objects])
-    avg_distance = np.mean([obj['distance'] for obj in selected_objects])
-
-    # Generar gráfica fig1 utilizando los valores proporcionados
-    fig1, _, _, _ = calculate_lookahead_distance(
-        mu=mu,
-        t=t,
-        l=l,
-        B=B,
-        cog=cog,
-        wheelbase=wheelbase,
-        turning_angle=turning_car,
-        object_height=avg_height,
-        object_distance=avg_distance,
-        image_path=None
-    )
-
-    # Responder preguntas basadas en la gráfica y los datos de entrada
-    if "distance" in user_question.lower():
-        response = f"La distancia de frenado promedio para los objetos seleccionados es {avg_distance:.2f} metros."
-    elif "height" in user_question.lower():
-        response = f"La altura promedio de los objetos seleccionados es {avg_height:.2f} píxeles."
-    elif "lookahead" in user_question.lower() or "gráfico" in user_question.lower():
-        response = "El gráfico generado muestra la distancia de visión hacia adelante para detenerse o esquivar obstáculos, basada en la velocidad del vehículo y otros parámetros proporcionados."
-    else:
-        response = "Actualmente puedo responder preguntas sobre la distancia de frenado, la altura del objeto, y el gráfico de Lookahead Distance. Por favor, reformule su pregunta si es posible."
-
-    # Agregar respuesta del chatbot a la conversación
-    return messages + [(response, "bot")]
 
 # Diseño de la interfaz de Gradio
 class Seafoam(Base):
@@ -540,27 +460,17 @@ with gr.Blocks(theme=seafoam) as demo:
                 
         <p style="text-align: center;">Generate a decision graph for lookahead distance for Stopping And Swerving based on the selected objects and vehicle parameters.</p>        
                 """)
-        decision_plot = gr.Plot(label="Lookahead Distance for Stopping and Swerving (Decision)")
-        
+        decision_plot = gr.Plot(label="Lookahead Distance for Stopping, Swerving, and Field of View (Decision)")
+
         # Botón para generar la gráfica de decisión
         decision_button = gr.Button("Generate Decision Graph", elem_id="inference-button")
-        
-        # Conectar el botón "Generate Decision Graph" con la función generate_decision_graph
+
         decision_button.click(
-            generate_decision_graph,
+            lambda mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids: generate_decision_graph(
+                mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids, objects_info
+            ),
             inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids],
             outputs=decision_plot,
-        )
-        
-        # Agregar un chatbot para preguntas sobre la gráfica de decisión
-        chatbot = gr.Chatbot(label="Ask about the Decision Graph")
-        chatbot_input = gr.Textbox(label="Your Question")
-        send_button = gr.Button("Send Question")
-        
-        send_button.click(
-            fn=chatbot_response,
-            inputs=[chatbot, mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids],
-            outputs=chatbot,
         )
         
     with gr.Tab("Documentation & Parameters"):
