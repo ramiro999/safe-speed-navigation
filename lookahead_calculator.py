@@ -52,12 +52,12 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     fig1.add_trace(go.Scatter(x=v_kph, y=d_look_swerve, mode='lines', name='Swerve Distance [m]', line=dict(color='orange', width=3)))
     fig1.update_layout(
         title='Lookahead Distance for Stopping and Swerving',
-        xaxis_title='Vehicle speed [kph]',
+        xaxis_title='Vehicle speed [km/h]',
         yaxis_title='Lookahead distance [m]',
         yaxis=dict(range=[0, 800]),
         paper_bgcolor='rgba(0,0,0,0)',  # Fondo transparente
         plot_bgcolor='rgba(0,0,0,0)',    # Fondo del plot transparente
-        font=dict(color='white')         # Texto en blanco para mejor contraste
+        font=dict(color='white')         # Texto en blanco
     )
 
     # Variables y cálculos para la segunda gráfica (AOV)
@@ -77,14 +77,14 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     fig2.add_trace(go.Scatter(x=v_kph, y=VFOV * 1e3, mode='lines', name='VAOV [miliradians]', line=dict(color='red', width=3)))
     fig2.update_layout(
         title='Angle of View (AOV) vs Vehicle Speed',
-        xaxis_title='Vehicle speed [kph]',
+        xaxis_title='Vehicle speed [km/h]',
         yaxis_title='Angle of View (AOV) [miliradians]',
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color='white')
     )
 
-    # Gráfico interactivo 3: IFOV para obstáculos positivos
+    # Gráfico interactivo 3: IFOV vs Vehicle Speed
     hp = 0.1  # Altura del obstáculo positivo
     IFOVp = np.arctan(hc / d_look_stop) - np.arctan((hc - hp) / d_look_stop)
 
@@ -92,7 +92,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     fig3.add_trace(go.Scatter(x=v_kph, y=IFOVp * 1e3, mode='lines', name='IFOV Positive [miliradians]', line=dict(color='magenta', width=3)))
     fig3.update_layout(
         title='Instantaneous Field of View vs Vehicle Speed',
-        xaxis_title='Vehicle speed [kph]',
+        xaxis_title='Vehicle speed [km/h]',
         yaxis_title='Instantaneous Field of View [miliradians]',
         xaxis=dict(
             type='log',

@@ -138,7 +138,7 @@ def object_detection_with_disparity():
             'distance': avg_distance
         })
 
-        # Crear tarjeta HTML mejorada para el objeto detectado
+        # Tarjeta para el objeto detectado
         cards_html += f"""
         <div style="background-color: #2c2f33; color: #ffffff; border-radius: 10px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
             <h3 style="margin-bottom: 10px; display: flex; align-items: center;">
@@ -378,70 +378,143 @@ with gr.Blocks(theme=seafoam) as demo:
     """)
 
     with gr.Tab("Stereo Inference"):
-        gr.Markdown("## Stereo Inference")
+        gr.Markdown("## Stereo Inference", elem_id="stereo-inference-title")
+        gr.HTML("""
+        <style>
+            #stereo-inference-title {
+                text-align: center;
+            }
+            .example-label {
+                font-size: 20px;
+                font-weight: bold;
+                text-align: center;
+                margin-top: 10px;
+            }
+                
+            #inference-button {
+                background-color: #2b3b46;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                margin: 4px 2px;
+                cursor: pointer;
+                border-radius: 8px;
+            }
+            #inference-button:hover {
+                background-color: #688581;
+            }
+        </style>
+        <p style="text-align: center;">Upload a pair of stereo images or choose the Example Stereo Images below, to perform stereo inference and generate the disparity map.</p>
+        """)
+
         with gr.Row():
             image_path_left = gr.Image(label="Left Image")
             image_path_right = gr.Image(label="Right Image")
 
         # Agregar ejemplos de imágenes estereoscópicas
+        gr.HTML('<div class="example-label">Example Stereo Images</div>')
         examples = gr.Examples(
             examples=[
-                ["./stereo_images/images_left/000026_10.png", "./stereo_images/images_right/000026_10.png"],
-                ["./stereo_images/images_left/000028_10.png", "./stereo_images/images_right/000028_10.png"],
-                ["./stereo_images/images_left/000023_10.png", "./stereo_images/images_right/000023_10.png"]
+            ["./stereo_images/images_left/000106_11.png", "./stereo_images/images_right/000106_11.png"],
+            ["./stereo_images/images_left/000070_11.png", "./stereo_images/images_right/000070_11.png"],
+            ["./stereo_images/images_left/000108_10.png", "./stereo_images/images_right/000108_10.png"],
+            ["./stereo_images/images_left/000194_11.png", "./stereo_images/images_right/000194_11.png"]
             ],
-            inputs=[image_path_left, image_path_right],
-            label="Example Stereo Images",
+            inputs=[image_path_left, image_path_right]
         )
 
-        run_button = gr.Button("Run Inference")    
+        run_button = gr.Button("Run Inference", elem_id="inference-button")
         output_image = gr.Image(label="Output Image", visible=True)
         run_button.click(stereo_inference, inputs=[image_path_left, image_path_right], outputs=output_image)
 
+        gr.HTML("""
+        <style>
+            #inference-button {
+                background-color: #2b3b46;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                margin: 4px 2px;
+                cursor: pointer;
+                border-radius: 8px;
+            }
+            #run-inference-button:hover {
+                background-color: #688581;
+            }
+        </style>
+        """)
+
     with gr.Tab("Object Detection"):
-        gr.Markdown("## Object Detection")
-        run_button = gr.Button("Run Detection")
+        gr.Markdown("## Object Detection", elem_id="object-detection-title")
+        gr.HTML("""
+        <style>
+            #object-detection-title {
+                text-align: center;
+            }
+        </style>
+                
+        <p style="text-align: center;">Perform object detection on the original left image using the detected objects from the disparity map.</p>
+        """)
+        run_button = gr.Button("Run Detection", elem_id="inference-button")
         detect_output_image = gr.Image(label="Object Detection Output Image", visible=True)
         cards_placeholder = gr.HTML(label="Detected Objects Info", visible=True)  # Placeholder for object cards
     
     run_button.click(object_detection_with_disparity, outputs=[detect_output_image, cards_placeholder])
 
     with gr.Tab("Calculate Distance"):
-        gr.Markdown("## Safe distance calculation section")
+        gr.Markdown("## Safe distance calculation section", elem_id="calculate-distance-title")
+        gr.HTML("""
+        <style>
+            #calculate-distance-title {
+                text-align: center;
+            }
+        </style>
+                
+        <p style="text-align: center;">Calculate the lookahead distance for stopping and swerving and optic system parameters based on the selected objects and vehicle parameters.</p>        
+        """)        
         with gr.Row():
             with gr.Column():
                 mu = gr.Slider(0.0, 1.0, value=0.3, step=0.01, label="Coefficient of friction (mu)")
                 t = gr.Slider(0.0, 5.0, value=0.2, step=0.01, label="Perception time (t) [s]")
                 l = gr.Slider(0.0, 5.0, value=0.25, step=0.01, label="Latency (l) [s]")
                 B = gr.Slider(0.0, 5.0, value=2.0, step=0.1, label="Buffer distance (B) [m]")
+
             with gr.Column():
+                vehicle_name = gr.Textbox(label="Vehicle Model", placeholder="Generic Vehicle")
                 turning_car = gr.Slider(0.0, 20.0, value=10.0, step=1.0, label="Turning Car [°]")
                 cog = gr.Slider(0.0, 2.0, value=0.5, step=0.01, label="Height of Center Gravity (COG) [m]")
                 wheelbase = gr.Slider(0.0, 3.0, value=1.5, step=0.01, label="Width of Wheelbase [m]")
-                
-                # Crear CheckboxGroup para seleccionar los objetos detectados
-                selected_object_ids = gr.CheckboxGroup(label="Select Object(s) by ID", choices=[], interactive=True)
-                # Botón para cargar los objetos detectados
-                load_button = gr.Button("Load Object Heights")
-                
-        # Agregar ejemplos de vehículos para calcular la distancia
+        
+        # Crear CheckboxGroup para seleccionar los objetos detectados
+        selected_object_ids = gr.CheckboxGroup(label="Select Object(s) by ID", choices=[], interactive=True)    
+        # Botón para cargar los objetos detectados
+        load_button = gr.Button("Load Object Heights", elem_id="inference-button")
+
+        # Agregar ejemplos de vehículos para calcular la distancia con nombres
+
+        gr.HTML('<div class="example-label">Example Vehicles</div>')
         examples = gr.Examples(
             examples=[
-                [2.96, 0.46, 11.8],  # Tesla S
-                [2.47, 0.4953, 10.40],  # Toyota Supra
-                [2.72, 0.4953, 12.67]  # Ford Mustang Shelby GT350
+            ["Tesla S", 2.96, 0.46, 11.8],  # Tesla S
+            ["Toyota Supra", 2.47, 0.4953, 10.40],  # Toyota Supra
+            ["Ford Mustang Shelby GT350", 2.72, 0.4953, 12.67]  # Ford Mustang Shelby GT350
             ],
-            inputs=[wheelbase, cog, turning_car],
-            label="Vehicle Examples",
+            inputs=[vehicle_name, wheelbase, cog, turning_car],
         )
         
-        run_button = gr.Button("Calculate Distance")
+        run_button = gr.Button("Calculate Distance", elem_id="inference-button")
         
         # Organizar las gráficas en dos filas
         with gr.Row():
             with gr.Column():
                 distance_plot1 = gr.Plot(label="Lookahead Distance for Stopping and Swerving")
-                distance_plot3 = gr.Plot(label="IFOV Positive Obstacle")
+                distance_plot3 = gr.Plot(label="IFOV")
             with gr.Column():
                 distance_plot2 = gr.Plot(label="Angle of View (AOV)")
                 distance_plot4 = gr.Plot(label="Positive Obstacle IFOV")
@@ -457,11 +530,20 @@ with gr.Blocks(theme=seafoam) as demo:
         )
 
     with gr.Tab("Decision"):
-        gr.Markdown("## Decision Making")
+        gr.Markdown("## Decision Making", elem_id="decision-making-title")
+        gr.HTML("""
+        <style>
+            #decision-making-title {
+                text-align: center;
+            }
+        </style>
+                
+        <p style="text-align: center;">Generate a decision graph for lookahead distance for Stopping And Swerving based on the selected objects and vehicle parameters.</p>        
+                """)
         decision_plot = gr.Plot(label="Lookahead Distance for Stopping and Swerving (Decision)")
         
         # Botón para generar la gráfica de decisión
-        decision_button = gr.Button("Generate Decision Graph")
+        decision_button = gr.Button("Generate Decision Graph", elem_id="inference-button")
         
         # Conectar el botón "Generate Decision Graph" con la función generate_decision_graph
         decision_button.click(
@@ -480,7 +562,13 @@ with gr.Blocks(theme=seafoam) as demo:
             inputs=[chatbot, mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids],
             outputs=chatbot,
         )
-
-
+        
+    with gr.Tab("Documentation & Parameters"):
+        gr.HTML("""
+            <div style="text-align: center;">
+            <h2>Documentation and Parameters</h2>
+            <p>Here you can find the documentation and parameters for the estimation of safe navigation speed for autonomous vehicles.</p>
+            </div>
+        """)
 
 demo.launch(share=True)
