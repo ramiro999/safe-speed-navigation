@@ -193,6 +193,14 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object
     return fig1, fig2, fig3, fig4
 
 
+def update_vehicle_params(vehicle_model):
+    if vehicle_model == "Tesla S":
+        return 11.8, 0.46, 2.96
+    elif vehicle_model == "Toyota Supra":
+        return 10.40, 0.4953, 2.47
+    elif vehicle_model == "Ford Mustang Shelby GT350":
+        return 12.67, 0.4953, 2.72
+
 # Diseño de la interfaz de Gradio
 class Seafoam(Base):
     def __init__(
@@ -290,7 +298,7 @@ with gr.Blocks(theme=seafoam) as demo:
     """)
 
     gr.HTML("""
-    <div class="title-text" style="display: inline-flex; align-items: center;">
+    <div class="title-text" style="text-align: center; display: flex; justify-content: center; align-items: center;">
         <img src="https://i.ibb.co/v10hH1k/icons8-autonomous-vehicles-96.png" alt="Icon" style="width: 50px; vertical-align: middle; margin-right: 10px;">
         <span> Estimation of safe navigation speed for autonomous vehicles </span>
         <img src="https://i.ibb.co/v10hH1k/icons8-autonomous-vehicles-96.png" alt="Icon" style="width: 50px; vertical-align: middle; margin-left: 10px;">
@@ -406,27 +414,25 @@ with gr.Blocks(theme=seafoam) as demo:
                 B = gr.Slider(0.0, 5.0, value=2.0, step=0.1, label="Buffer distance (B) [m]")
 
             with gr.Column():
-                vehicle_name = gr.Textbox(label="Vehicle Model", placeholder="Generic Vehicle")
+                vehicle_name = gr.Dropdown(
+                    label="Vehicle Model", 
+                    choices=["Tesla S", "Toyota Supra", "Ford Mustang Shelby GT350"],
+                    interactive=True
+                )
                 turning_car = gr.Slider(0.0, 20.0, value=10.0, step=1.0, label="Turning Car [°]")
                 cog = gr.Slider(0.0, 2.0, value=0.5, step=0.01, label="Height of Center Gravity (COG) [m]")
                 wheelbase = gr.Slider(0.0, 3.0, value=1.5, step=0.01, label="Width of Wheelbase [m]")
+
+                vehicle_name.change(
+                    fn=update_vehicle_params, 
+                    inputs=[vehicle_name],
+                    outputs=[turning_car, cog, wheelbase]
+                )
         
         # Crear CheckboxGroup para seleccionar los objetos detectados
         selected_object_ids = gr.CheckboxGroup(label="Select Object(s) by ID", choices=[], interactive=True)    
         # Botón para cargar los objetos detectados
         load_button = gr.Button("Load Object Heights", elem_id="inference-button")
-
-        # Agregar ejemplos de vehículos para calcular la distancia con nombres
-
-        gr.HTML('<div class="example-label">Example Vehicles</div>')
-        examples = gr.Examples(
-            examples=[
-            ["Tesla S", 2.96, 0.46, 11.8],  # Tesla S
-            ["Toyota Supra", 2.47, 0.4953, 10.40],  # Toyota Supra
-            ["Ford Mustang Shelby GT350", 2.72, 0.4953, 12.67]  # Ford Mustang Shelby GT350
-            ],
-            inputs=[vehicle_name, wheelbase, cog, turning_car],
-        )
         
         run_button = gr.Button("Calculate Distance", elem_id="inference-button")
         
@@ -449,8 +455,8 @@ with gr.Blocks(theme=seafoam) as demo:
             outputs=selected_object_ids,
         )
 
-    with gr.Tab("Decision"):
-        gr.Markdown("## Decision Making", elem_id="decision-making-title")
+    with gr.Tab("Results"):
+        gr.Markdown("## Result Making", elem_id="decision-making-title")
         gr.HTML("""
         <style>
             #decision-making-title {
