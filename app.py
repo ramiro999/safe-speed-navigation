@@ -10,6 +10,8 @@ import tempfile
 from typing import Union, Iterable
 from gradio.themes.utils import colors, fonts, sizes
 from gradio.themes.base import Base
+import plotly.express as px
+import plotly.graph_objects as go
 
 # Añadir directorios al path
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
@@ -39,7 +41,6 @@ def save_temp_image(image_array):
     cv2.imwrite(temp_file.name, image_array)
     return temp_file.name
 
-# Función stereo_inference()
 def stereo_inference(image_path_left=None, image_path_right=None):
     """
     Realiza inferencia estéreo. Soporta tanto rutas de archivo como imágenes cargadas en memoria (numpy.ndarray).
@@ -73,10 +74,35 @@ def stereo_inference(image_path_left=None, image_path_right=None):
         # Ordenar por fecha de modificación
         result_files.sort(key=os.path.getmtime, reverse=True)
         stereo_output_image = os.path.abspath(result_files[0])
-        return gr.update(value=stereo_output_image, visible=True)
+
+        # Cargar la imagen de disparidad generada
+        disparity = cv2.imread(stereo_output_image, cv2.IMREAD_UNCHANGED)
+
+        # Convertir a escala de grises y ajustar la visualización
+        disparity_norm = cv2.normalize(disparity, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+        # Crear la visualización interactiva con Plotly
+        fig = go.Figure()
+
+        # Añadir mapa de disparidad como una imagen en la gráfica
+        fig.add_trace(go.Image(z=disparity_norm))
+
+        # Configuración del diseño para mejorar la visualización
+        fig.update_layout(
+            xaxis=dict(scaleanchor="y"),
+            yaxis=dict(scaleanchor="x"),
+            #height=800,  # Ajustar según el tamaño que desees
+            #width=1200,  # Ajustar según el tamaño que desees
+            autosize=True,  # Permite el ajuste dinámico del tamaño
+            showlegend=True
+        )
+
+        # Mostrar la imagen de disparidad
+        return fig
 
     # En caso de que no se encuentre un archivo, lanzar un error
     raise FileNotFoundError("No se encontró ninguna imagen generada en la carpeta de resultados.")
+
 
 # Función para detección de objetos y calcular la distancia usando la disparidad
 def object_detection_with_disparity():
@@ -194,7 +220,9 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object
 
 
 def update_vehicle_params(vehicle_model):
-    if vehicle_model == "Tesla S":
+    if vehicle_model == "Volkswagen Passat (B6)":
+        return 11.4, 0.55, 2.709
+    elif vehicle_model == "Tesla S":
         return 11.8, 0.46, 2.96
     elif vehicle_model == "Toyota Supra":
         return 10.40, 0.4953, 2.47
@@ -355,7 +383,7 @@ with gr.Blocks(theme=seafoam) as demo:
         )
 
         run_button = gr.Button("Run Inference", elem_id="inference-button")
-        output_image = gr.Image(label="Output Image", visible=True)
+        output_image = gr.Plot(label="Output Image", visible=True)
         run_button.click(stereo_inference, inputs=[image_path_left, image_path_right], outputs=output_image)
 
         gr.HTML("""
@@ -416,7 +444,7 @@ with gr.Blocks(theme=seafoam) as demo:
             with gr.Column():
                 vehicle_name = gr.Dropdown(
                     label="Vehicle Model", 
-                    choices=["Tesla S", "Toyota Supra", "Ford Mustang Shelby GT350"],
+                    choices=["Volkswagen Passat (B6)","Tesla S", "Toyota Supra", "Ford Mustang Shelby GT350"],
                     interactive=True
                 )
                 turning_car = gr.Slider(0.0, 20.0, value=10.0, step=1.0, label="Turning Car [°]")

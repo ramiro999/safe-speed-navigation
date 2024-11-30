@@ -14,9 +14,10 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     a = -9  # Desaceleración durante el frenado [m/s^2]
     Tper = t  # Tiempo de percepción
     Tact = l  # Latencia
-    d_offset = B  # Distancia buffer [m]
+    d_offset = B  # Distancia de buffer [m]
     w = wheelbase  # Ancho del vehículo
     turningCar = turning_angle  # Ángulo de giro del vehículo
+    object_height = object_height * (0.1) # Convertir la altura del objeto a metros, tipicamente el GSD de KITTI es 0.1.
 
     # Rangos de velocidad
     v_mph = np.arange(1, 151)  # Velocidades de 1 a 150 mph
@@ -62,10 +63,10 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
     # Variables y cálculos para la segunda gráfica (AOV)
     HFOV = np.zeros_like(v_mtps)
-    hc = cog  # Altura del centro de gravedad [m]
+    hc = 2  # Altura de la camara, por defecto 2.
     thetaSlope = np.deg2rad(15)  # Ángulo de la pendiente
-    thetaMin = np.arctan(hc / d_look_stop)
-    thetaMax = np.arctan(hc / d_offset)
+    thetaMin = np.arctan(hc / d_look_stop) # angle below horizon as determined by stopping distance
+    thetaMax = np.arctan(hc / d_offset) # angle below horizon as determined by baseline B (length of car)
     VFOV = 2 * thetaSlope + np.minimum(thetaMin, thetaMax)
 
     for v in range(1, 151):
@@ -85,7 +86,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     )
 
     # Gráfico interactivo 3: IFOV vs Vehicle Speed
-    hp = 0.1  # Altura del obstáculo positivo
+    hp = object_height  # Altura del obstáculo positivo
     IFOVp = np.arctan(hc / d_look_stop) - np.arctan((hc - hp) / d_look_stop)
 
     fig3 = go.Figure()
@@ -111,6 +112,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
     # Gráfico interactivo 4: IFOV para obstáculos positivos con diferentes alturas
     looakheadDistance = np.arange(1, 1001)
+
     if object_height is not None:
         hp_values = np.array([object_height])  # Usar la altura del objeto si se proporciona
     else:
@@ -122,13 +124,13 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
     fig4 = go.Figure()
     for i, hp in enumerate(hp_values):
-        fig4.add_trace(go.Scatter(x=looakheadDistance, y=IFOVp[i, :] * 1e3, mode='lines', name=f'Object Height: {hp:.1f} m', line=dict(width=3)))
+        fig4.add_trace(go.Scatter(x=looakheadDistance, y=IFOVp[i, :] * 1e3, mode='lines', name=f'Object Height: {hp:.1f} meters', line=dict(width=3)))
 
     # Añadir una leyenda personalizada para la altura del objeto seleccionado
     if object_height is not None:
         fig4.add_trace(go.Scatter(
             x=[1], y=[2], mode='text', name='Object Height',
-            text=[f'Object Height: {object_height:.2f} m'],
+            text=[f'Object Height: {object_height:.2f} meters'],
             textposition='top right',
             showlegend=False
         ))
@@ -221,7 +223,7 @@ def generate_decision_graph(mu, t, l, B, turning_car, cog, wheelbase, selected_o
         title='Lookahead Distance for Stopping, Swerving, and Field of View',
         xaxis_title='Vehicle speed [km/h]',
         yaxis_title='Lookahead distance / FOV [m / miliradians]',
-        yaxis=dict(range=[0, 800]),
+        yaxis=dict(range=[0, 500]),
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color='white'),
