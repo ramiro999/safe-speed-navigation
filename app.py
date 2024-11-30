@@ -13,6 +13,7 @@ from gradio.themes.base import Base
 import plotly.express as px
 import plotly.graph_objects as go
 
+
 # Añadir directorios al path
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF/ops/setup/MultiScaleDeformableAttention')
@@ -383,7 +384,7 @@ with gr.Blocks(theme=seafoam) as demo:
         )
 
         run_button = gr.Button("Run Inference", elem_id="inference-button")
-        output_image = gr.Plot(label="Output Image", visible=True)
+        output_image = gr.Plot(label="Disparity Map", visible=True)
         run_button.click(stereo_inference, inputs=[image_path_left, image_path_right], outputs=output_image)
 
         gr.HTML("""
