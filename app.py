@@ -13,7 +13,6 @@ from gradio.themes.base import Base
 import plotly.express as px
 import plotly.graph_objects as go
 
-
 # Añadir directorios al path
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF/ops/setup/MultiScaleDeformableAttention')
@@ -92,8 +91,6 @@ def stereo_inference(image_path_left=None, image_path_right=None):
         fig.update_layout(
             xaxis=dict(scaleanchor="y"),
             yaxis=dict(scaleanchor="x"),
-            #height=800,  # Ajustar según el tamaño que desees
-            #width=1200,  # Ajustar según el tamaño que desees
             autosize=True,  # Permite el ajuste dinámico del tamaño
             showlegend=True
         )
@@ -103,7 +100,6 @@ def stereo_inference(image_path_left=None, image_path_right=None):
 
     # En caso de que no se encuentre un archivo, lanzar un error
     raise FileNotFoundError("No se encontró ninguna imagen generada en la carpeta de resultados.")
-
 
 # Función para detección de objetos y calcular la distancia usando la disparidad
 def object_detection_with_disparity():
@@ -115,15 +111,7 @@ def object_detection_with_disparity():
     disparity, valid = readDepthVKITTI(stereo_output_image)
 
     # Leer la imagen RGB original (una de las imágenes estéreo)
-    image = cv2.imread(image_path_left_original, cv2.IMREAD_UNCHANGED)
-
-    # Verificar si la imagen tiene un canal alfa (es decir, 4 canales: RGBA) y convertir a RGB
-    if image.shape[-1] == 4:
-        image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
-
-    # Si la imagen está en escala de grises, convertir a RGB
-    if len(image.shape) == 2 or image.shape[-1] == 1:
-        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    image = cv2.imread(image_path_left_original, cv2.IMREAD_COLOR)
 
     # Preprocesar la imagen para la entrada del modelo DETR
     _, image_tensor = preprocess_image(image)
@@ -138,9 +126,13 @@ def object_detection_with_disparity():
     bboxes = outputs['pred_boxes'][0, keep].numpy()
     labels = probas[keep].argmax(-1).numpy()
 
+    # Colores para las clases
+    colors = px.colors.qualitative.Plotly
+
     # Procesar información de objetos detectados
     objects_info = []
     cards_html = ""  # Variable para almacenar HTML de las tarjetas mejoradas
+
     for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):
         cx, cy, w, h = bbox
         x0, y0 = int((cx - w / 2) * image.shape[1]), int((cy - h / 2) * image.shape[0])
@@ -152,10 +144,10 @@ def object_detection_with_disparity():
         bbox_valid = valid[y0:y1, x0:x1]
 
         # Calcular distancia promedio en región válida
-        if bbox_valid.any():
+        if bbox_valid.any() and bbox_disp[bbox_valid].mean() != 0:
             avg_distance = bbox_disp[bbox_valid].mean() / 100  # Convertir a metros
         else:
-            avg_distance = float('inf')  # Si no hay valores válidos
+            avg_distance = float('inf')  # Si no hay valores válidos o la disparidad es cero
 
         # Agregar información del objeto detectado
         objects_info.append({
@@ -179,13 +171,52 @@ def object_detection_with_disparity():
         </div>
         """
 
-    # Visualizar y guardar resultados
-    ids = [obj['id'] for obj in objects_info]
-    distances = [obj['distance'] for obj in objects_info]
-    fig_detr = plot_detr_results_with_distance(image, bboxes, labels, ids, distances)
-    fig_detr.savefig("./outputs/object_detection_results_with_distances.png", bbox_inches="tight")
+    # Visualizar y guardar resultados en Plotly
+    fig = go.Figure()
 
-    return "./outputs/object_detection_results_with_distances.png", cards_html
+    # Añadir la imagen original al gráfico
+    fig.add_trace(go.Image(
+        z=image,  # La imagen se pasa en z
+        colormodel='rgb'  # Especificar el modelo de color correctamente
+    ))
+
+    # Añadir las cajas delimitadoras (bounding boxes) sobre la imagen
+    for obj in objects_info:
+        x0, y0, x1, y1 = obj['bbox']
+        color = colors[COCO_INSTANCE_CATEGORY_NAMES.index(obj['class']) % len(colors)]  # Asignar un color basado en la clase del objeto
+        fig.add_shape(
+            type="rect",
+            x0=x0, y0=y0, x1=x1, y1=y1,
+            line=dict(color=color, width=2),
+            fillcolor=f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)"  # Color con transparencia
+        )
+
+        # Añadir el texto con la distancia, ID y clase sobre la caja
+        fig.add_annotation(
+            x=(x0 + x1) / 2, y=y0 - 10,
+            text=f"ID: {obj['id']} Class: {obj['class']} Dist: {obj['distance']:.2f} m",
+            showarrow=False,
+            font=dict(color=color, size=12),
+            bgcolor="rgba(0, 0, 0, 0.5)",
+            bordercolor=color,
+            borderwidth=1,
+            borderpad=2
+        )
+
+    # Ajustes de la figura para mejorar la visualización
+    fig.update_layout(
+        xaxis=dict(showgrid=False, zeroline=False),
+        yaxis=dict(showgrid=False, zeroline=False),
+        showlegend=False,
+        autosize=True,
+        margin=dict(t=0, b=40, l=0, r=0),
+    )
+
+    # Guardar el gráfico como imagen
+    fig.write_image("./outputs/object_detection_results_with_distances_plotly.png")
+
+    # Devolver el gráfico interactivo
+    return fig, cards_html
 
 
 # Función para el cálculo de distancia utilizando gráficos interactivos de Plotly
@@ -419,7 +450,7 @@ with gr.Blocks(theme=seafoam) as demo:
         <p style="text-align: center;">Perform object detection on the original left image using the detected objects from the disparity map.</p>
         """)
         run_button = gr.Button("Run Detection", elem_id="inference-button")
-        detect_output_image = gr.Image(label="Object Detection Output Image", visible=True)
+        detect_output_image = gr.Plot(label="Object Detection", visible=True)
         cards_placeholder = gr.HTML(label="Detected Objects Info", visible=True)  # Placeholder for object cards
     
     run_button.click(object_detection_with_disparity, outputs=[detect_output_image, cards_placeholder])
