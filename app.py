@@ -23,7 +23,6 @@ from detr.image_processing import preprocess_image, plot_detr_results_with_dista
 from detr.model_loader import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
 from stereo.NMRF.inference import run_inference
 from stereo.NMRF.nmrf.utils.frame_utils import readDepthVKITTI
-from lookahead_calculator import generate_decision_graph
 
 # Cargar el modelo DETR
 model = load_detr_model()
@@ -455,7 +454,7 @@ with gr.Blocks(theme=seafoam) as demo:
     
     run_button.click(object_detection_with_disparity, outputs=[detect_output_image, cards_placeholder])
 
-    with gr.Tab("Calculate Distance"):
+    with gr.Tab("Safe speed distance"):
         gr.Markdown("## Safe distance calculation section", elem_id="calculate-distance-title")
         gr.HTML("""
         <style>
@@ -514,37 +513,5 @@ with gr.Blocks(theme=seafoam) as demo:
             inputs=None,
             outputs=selected_object_ids,
         )
-
-    with gr.Tab("Results"):
-        gr.Markdown("## Result Making", elem_id="decision-making-title")
-        gr.HTML("""
-        <style>
-            #decision-making-title {
-                text-align: center;
-            }
-        </style>
-                
-        <p style="text-align: center;">Generate a decision graph for lookahead distance for Stopping And Swerving based on the selected objects and vehicle parameters.</p>        
-                """)
-        decision_plot = gr.Plot(label="Lookahead Distance for Stopping, Swerving, and Field of View (Decision)")
-
-        # Botón para generar la gráfica de decisión
-        decision_button = gr.Button("Generate Decision Graph", elem_id="inference-button")
-
-        decision_button.click(
-            lambda mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids: generate_decision_graph(
-                mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids, objects_info
-            ),
-            inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids],
-            outputs=decision_plot,
-        )
-        
-    with gr.Tab("Documentation & Parameters"):
-        gr.HTML("""
-            <div style="text-align: center;">
-            <h2>Documentation and Parameters</h2>
-            <p>Here you can find the documentation and parameters for the estimation of safe navigation speed for autonomous vehicles.</p>
-            </div>
-        """)
-
+    
 demo.launch(share=True)
