@@ -1,23 +1,49 @@
-# lookahead_calculator.py:
+# autonomous_navigation_calculator.py:
 import numpy as np
 import plotly.graph_objects as go
 import torch
 from detr.image_processing import preprocess_image, plot_detr_results
 from detr.model_loader import load_detr_model
 
+"""
+Script para calcular las distancias de frenado y esquiva para un vehículo autónomo en función de los parámetros de entrada.
+"""
+
 # Cargar el modelo
 model = load_detr_model()
 
 def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, object_height=None, object_distance=None, image_path=None):
+    """
+    Calcula las distancias de frenado y esquiva para un vehículo autónomo en función de los parámetros de entrada.
+    
+    Parámetros:
+    - mu: Coeficiente de fricción entre los neumáticos y la carretera.
+    - t: Tiempo de percepción de las camáras.
+    - l: Tiempo de latencia que tarda el sistema del vehiculo autonomo en procesar los datos.
+    - B: Distancia de desplazamiento debida a la longitud del coche.
+    - cog: Centro de gravedad del vehículo.
+    - wheelbase: Distancia entre los ejes delantero y trasero del vehículo.
+    - turning_angle: Ángulo de giro del vehículo.
+    - object_height: Altura del objeto en metros.
+    - object_distance: Distancia del objeto al sistema óptico en metros.
+    - image_path: Ruta de la imagen a procesar.
+
+    Retorna:
+    - fig1: Gráfico interactivo de Ángulo de Vista (AOV) vs Velocidad del vehículo.
+    - fig2: Gráfico interactivo de Campo de Visión Instantáneo (IFOV) para obstáculos positivos con diferentes alturas.
+    - fig3: Gráfico interactivo de Distancia de frenado.
+    - fig4: Gráfico interactivo de Distancia de esquiva.
+    """
+    
     # Parámetros fijos para el modelo 
     g = 9.81
-    a = -9  # Desaceleración durante el frenado [m/s^2]
+    a = - mu * g  # Desaceleración durante el frenado [m/s^2]
     Tper = t  # Tiempo de percepción
     Tact = l  # Latencia
-    d_offset = B  # Distancia de buffer [m]
+    d_offset = B  # Distancia de desplazamiento debida a la longitud del coche.
     w = wheelbase  # Ancho del vehículo
     turningCar = turning_angle  # Ángulo de giro del vehículo
-    object_height = object_height * (0.1) # Convertir la altura del objeto a metros, tipicamente el GSD de KITTI es 0.1.
+    object_height = object_height * (0.1) # Convertir la altura del objeto a metros, tipicamente el GSD de KITTI es 0.1. Esto es lo unico que me genera inquietud
     hp = object_height  # Altura del obstáculo positivo
 
     # Rangos de velocidad
@@ -25,7 +51,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     v_kph = v_mph * 1.609  # Conversion de mph a kph
     v_mtps = v_mph * (1609.34 / 3600)  # Conversion de mph a metros por segundo
 
-    # Inicializar distancias para la primera gráfica
+    # Inicialización de las distancias y constantes
     d_per = np.zeros_like(v_mtps)
     d_act = np.zeros_like(v_mtps)
     d_brake = np.zeros_like(v_mtps)
@@ -38,20 +64,26 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
     # Calcular las distancias de frenado y maniobra para la primera gráfica
     for v in range(1, 151):
+        # Distancias de frenado
         d_per[v - 1] = v_mtps[v - 1] * (2 * Tper)
         d_act[v - 1] = v_mtps[v - 1] * Tact
-        d_brake[v - 1] = -v_mtps[v - 1] ** 2 / (2 * a)
+        d_brake[v - 1] = - v_mtps[v - 1] ** 2 / (2 * a)
         d_look_stop[v - 1] = d_offset + d_per[v - 1] + d_act[v - 1] + d_brake[v - 1]
+        #Distancias de esquiva
         K_roll[v - 1] = (g * (w / 2)) / (cog * v_mtps[v - 1] ** 2)
         K_slip[v - 1] = (mu * g) / (v_mtps[v - 1] ** 2)
         turning[v - 1] = max(1 / (min(K_roll[v - 1], K_slip[v - 1])), turningCar)
         d_swerve[v - 1] = np.real(np.sqrt(turning[v - 1] ** 2 - (turning[v - 1] - w) ** 2))
         d_look_swerve[v - 1] = d_offset + d_per[v - 1] + d_act[v - 1] + d_swerve[v - 1]
 
-    # Variables y cálculos para la segunda gráfica (AOV)
+    # Variables y cálculos para la primera gráfica (AOV vs Velocidad)
     HFOV = np.zeros_like(v_mtps)
-    hc = 1.65  # Altura de la camara, dataset KITTI 1.65 m
-    thetaSlope = np.deg2rad(15)  # Ángulo de la pendiente
+    hc = 1.65  # Altura de la cámara, dataset KITTI 1.65 m
+    thetaSlope = np.deg2rad(15)  # Ángulo de la pendiente, por lo general 15 grados
+
+
+    # ME FALTA ANALIZAR POR QUE THETAMIN Y THETAMAX SON DIFERENTES
+    
     thetaMin = np.arctan(hc / d_look_stop)  # Ángulo debajo del horizonte determinado por la distancia de frenado
     thetaMax = np.arctan(hc / d_offset)  # Ángulo debajo del horizonte determinado por la longitud de la base B (longitud del automóvil)
     VFOV = 2 * thetaSlope + np.minimum(thetaMin, thetaMax)
@@ -59,7 +91,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     for v in range(1, 151):
         HFOV[v - 1] = d_look_stop[v - 1] / turning[v - 1]
 
-    # Gráfico interactivo 1: Lookahead Distance
+    # Gráfico interactivo 1: Lookahead Distance ----------------------------------------------------------------------------------
     fig1 = go.Figure()
     fig1.add_trace(go.Scatter(x=v_kph, y=HFOV * 1e3, mode='lines', name='HAOV [miliradians]', line=dict(color='lime', width=3)))
     fig1.add_trace(go.Scatter(x=v_kph, y=VFOV * 1e3, mode='lines', name='VAOV [miliradians]', line=dict(color='red', width=3)))
@@ -121,7 +153,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         margin=dict(t=40, b=40, l=40, r=40)
     )
 
-    # Gráfico interactivo 2: IFOV para obstáculos positivos con diferentes alturas
+    # Gráfico interactivo 2: IFOV para diferentes obstaculos positivos ------------------------------------------------------------
     looakheadDistance = np.arange(1, 1001)
 
     if object_height is not None:
@@ -180,7 +212,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         font=dict(color='white')
     )
 
-    # Gráfico interactivo 3: Lookahead Distance for Stopping
+    # Gráfico interactivo 3: Lookahead Distance for Stopping -----------------------------------------------------------------------------
     fig3 = go.Figure()
     fig3.add_trace(go.Scatter(x=v_kph, y=d_look_stop, mode='lines', name='Stopping Distance [m]', line=dict(color='aqua', width=3)))
 
@@ -256,7 +288,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         font=dict(color='white')
     )
 
-    # Gráfico interactivo 4: Lookahead Distance for Swerving
+    # Gráfico interactivo 4: Lookahead Distance for Swerving -----------------------------------------------------------------------------
     fig4 = go.Figure()
     fig4.add_trace(go.Scatter(x=v_kph, y=d_look_swerve, mode='lines', name='Swerving Distance [m]', line=dict(color='orange', width=3)))
 
@@ -332,7 +364,5 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         font=dict(color='white')
     )
 
-    # Retornar las gráficas interactuables de Plotly
+    # Retornar las gráficas interactivas
     return fig1, fig2, fig3, fig4
-    
-    

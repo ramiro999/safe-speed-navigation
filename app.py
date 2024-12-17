@@ -1,5 +1,6 @@
 #app.py
 
+# Importar librerías necesarias
 import sys
 import os
 import torch
@@ -7,22 +8,27 @@ import gradio as gr
 import cv2
 import numpy as np
 import tempfile
+import plotly.express as px
+import plotly.graph_objects as go
 from typing import Union, Iterable
 from gradio.themes.utils import colors, fonts, sizes
 from gradio.themes.base import Base
-import plotly.express as px
-import plotly.graph_objects as go
+
+# Importar módulos personalizados
+from autonomous_navigation_calculator import calculate_lookahead_distance
+from detr.image_processing import preprocess_image, plot_detr_results_with_distance
+from detr.model_loader import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
 
 # Añadir directorios al path
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF/ops/setup/MultiScaleDeformableAttention')
 
-# Importar módulos personalizados
-from lookahead_calculator import calculate_lookahead_distance
-from detr.image_processing import preprocess_image, plot_detr_results_with_distance
-from detr.model_loader import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
 from stereo.NMRF.inference import run_inference
 from stereo.NMRF.nmrf.utils.frame_utils import readDepthVKITTI
+
+"""
+Función main para la interfaz de Gradio.
+"""
 
 # Cargar el modelo DETR
 model = load_detr_model()
@@ -77,26 +83,29 @@ def stereo_inference(image_path_left=None, image_path_right=None):
         # Cargar la imagen de disparidad generada
         disparity = cv2.imread(stereo_output_image, cv2.IMREAD_UNCHANGED)
 
-        # Convertir a escala de grises y ajustar la visualización
-        disparity_norm = cv2.normalize(disparity, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        # Calcular el mapa de profundidad
+        focal_length = 721.5377  # Longitud focal en píxeles (ejemplo)
+        baseline = 0.54  # Distancia entre las cámaras en metros (ejemplo)
+        depth_map = (focal_length * baseline) / (disparity + 1e-6)  # Evitar división por cero
 
-        # Crear la visualización interactiva con Plotly
-        fig = go.Figure()
+        # Normalizar el mapa de profundidad para visualización
+        depth_map_norm = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-        # Añadir mapa de disparidad como una imagen en la gráfica
-        fig.add_trace(go.Image(z=disparity_norm))
+        # Crear la visualización interactiva con Plotly para el mapa de profundidad
+        fig_depth = go.Figure()
+        fig_depth.add_trace(go.Image(z=depth_map))
 
         # Configuración del diseño para mejorar la visualización
-        fig.update_layout(
+        fig_depth.update_layout(
             xaxis=dict(scaleanchor="y"),
             yaxis=dict(scaleanchor="x"),
             autosize=True,  # Permite el ajuste dinámico del tamaño
             showlegend=True
         )
 
-        # Mostrar la imagen de disparidad
-        return fig
-
+        # Mostrar solo el mapa de profundidad
+        return fig_depth
+    
     # En caso de que no se encuentre un archivo, lanzar un error
     raise FileNotFoundError("No se encontró ninguna imagen generada en la carpeta de resultados.")
 
@@ -252,7 +261,7 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object
 
 def update_vehicle_params(vehicle_model):
     if vehicle_model == "Volkswagen Passat (B6)":
-        return 11.4, 0.55, 2.709
+        return 11.4, 0.55, 2.71
     elif vehicle_model == "Tesla S":
         return 11.8, 0.46, 2.96
     elif vehicle_model == "Toyota Supra":
@@ -401,7 +410,7 @@ with gr.Blocks(theme=seafoam) as demo:
             image_path_left = gr.Image(label="Left Image")
             image_path_right = gr.Image(label="Right Image")
 
-        # Agregar ejemplos de imágenes estereoscópicas
+        # Agregar ejemplos de imágenes estéreos 
         gr.HTML('<div class="example-label">Example Stereo Images</div>')
         examples = gr.Examples(
             examples=[
@@ -414,7 +423,7 @@ with gr.Blocks(theme=seafoam) as demo:
         )
 
         run_button = gr.Button("Run Inference", elem_id="inference-button")
-        output_image = gr.Plot(label="Disparity Map", visible=True)
+        output_image = gr.Plot(label="Depth Map", visible=True)
         run_button.click(stereo_inference, inputs=[image_path_left, image_path_right], outputs=output_image)
 
         gr.HTML("""
@@ -450,7 +459,7 @@ with gr.Blocks(theme=seafoam) as demo:
         """)
         run_button = gr.Button("Run Detection", elem_id="inference-button")
         detect_output_image = gr.Plot(label="Object Detection", visible=True)
-        cards_placeholder = gr.HTML(label="Detected Objects Info", visible=True)  # Placeholder for object cards
+        cards_placeholder = gr.HTML(label="Detected Objects Info", visible=True)
     
     run_button.click(object_detection_with_disparity, outputs=[detect_output_image, cards_placeholder])
 
@@ -470,7 +479,7 @@ with gr.Blocks(theme=seafoam) as demo:
                 mu = gr.Slider(0.0, 1.0, value=0.3, step=0.01, label="Coefficient of friction (mu)")
                 t = gr.Slider(0.0, 5.0, value=0.2, step=0.01, label="Perception time (t) [s]")
                 l = gr.Slider(0.0, 5.0, value=0.25, step=0.01, label="Latency (l) [s]")
-                B = gr.Slider(0.0, 5.0, value=2.0, step=0.1, label="Buffer distance (B) [m]")
+                B = gr.Slider(0.0, 3.0, value=2.0, step=0.1, label="Offset distance [m]")
 
             with gr.Column():
                 vehicle_name = gr.Dropdown(
@@ -488,9 +497,8 @@ with gr.Blocks(theme=seafoam) as demo:
                     outputs=[turning_car, cog, wheelbase]
                 )
         
-        # Crear CheckboxGroup para seleccionar los objetos detectados
+        # CheckboxGroup para seleccionar los objetos detectados
         selected_object_ids = gr.CheckboxGroup(label="Select Object(s) by ID", choices=[], interactive=True)    
-        # Botón para cargar los objetos detectados
         load_button = gr.Button("Load Object Heights", elem_id="inference-button")
         
         run_button = gr.Button("Calculate Distance", elem_id="inference-button")
@@ -498,13 +506,13 @@ with gr.Blocks(theme=seafoam) as demo:
         # Organizar las gráficas en dos filas
         with gr.Row():
             with gr.Column():
-                distance_plot1 = gr.Plot(label="Lookahead Distance for Stopping and Swerving")
-                distance_plot3 = gr.Plot(label="IFOV")
+                distance_plot1 = gr.Plot(label="Angle of View (AOV)")
+                distance_plot3 = gr.Plot(label="Lookahead Distance for Stopping")
             with gr.Column():
-                distance_plot2 = gr.Plot(label="Angle of View (AOV)")
-                distance_plot4 = gr.Plot(label="Positive Obstacle IFOV")
+                distance_plot2 = gr.Plot(label="Positive Obstacle IFOV")
+                distance_plot4 = gr.Plot(label="Lookahead Distance for Swerving")
                 
-        # Conectar la función calculate_distance con los componentes de entrada/salida
+        # Conexión la función calculate_distance con los componentes de entrada/salida
         run_button.click(calculate_distance, inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids], outputs=[distance_plot1, distance_plot2, distance_plot3, distance_plot4])
 
         # Acción del botón "Load Object Heights" para actualizar las opciones del CheckboxGroup
