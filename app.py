@@ -29,7 +29,7 @@ from stereo.NMRF.nmrf.utils.frame_utils import readDepthVKITTI
 """
 Función main para la interfaz de Gradio.
 """
-
+ 
 # Cargar el modelo DETR
 model = load_detr_model()
 
@@ -60,9 +60,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     if not isinstance(image_path_left, str) or not isinstance(image_path_right, str):
         raise ValueError("Las entradas deben ser rutas de archivo o imágenes numpy.ndarray.")
 
-    global stereo_output_image, image_path_left_original
-    image_path_left_original = image_path_left  # Guardar la imagen original para la detección de objetos
-
+    global stereo_output_image
     dataset_name = "custom_dataset"
     output = "./resultados_kitti"
     resume_path = "./stereo/NMRF/pretrained/kitti.pth"
@@ -79,35 +77,48 @@ def stereo_inference(image_path_left=None, image_path_right=None):
         # Ordenar por fecha de modificación
         result_files.sort(key=os.path.getmtime, reverse=True)
         stereo_output_image = os.path.abspath(result_files[0])
+        return gr.update(value=stereo_output_image, visible=True)
 
-        # Cargar la imagen de disparidad generada
-        disparity = cv2.imread(stereo_output_image, cv2.IMREAD_UNCHANGED)
-
-        # Calcular el mapa de profundidad
-        focal_length = 721.5377  # Longitud focal en píxeles (ejemplo)
-        baseline = 0.54  # Distancia entre las cámaras en metros (ejemplo)
-        depth_map = (focal_length * baseline) / (disparity + 1e-6)  # Evitar división por cero
-
-        # Normalizar el mapa de profundidad para visualización
-        depth_map_norm = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-
-        # Crear la visualización interactiva con Plotly para el mapa de profundidad
-        fig_depth = go.Figure()
-        fig_depth.add_trace(go.Image(z=depth_map))
-
-        # Configuración del diseño para mejorar la visualización
-        fig_depth.update_layout(
-            xaxis=dict(scaleanchor="y"),
-            yaxis=dict(scaleanchor="x"),
-            autosize=True,  # Permite el ajuste dinámico del tamaño
-            showlegend=True
-        )
-
-        # Mostrar solo el mapa de profundidad
-        return fig_depth
-    
     # En caso de que no se encuentre un archivo, lanzar un error
     raise FileNotFoundError("No se encontró ninguna imagen generada en la carpeta de resultados.")
+
+def generate_depth_map(disparity_path, focal_length=721.5377, baseline=0.54):
+    """
+    Genera un mapa de profundidad a partir de un mapa de disparidad.
+    """
+    # Cargar el mapa de disparidad
+    disparity = cv2.imread(disparity_path, cv2.IMREAD_GRAYSCALE)
+    
+    if disparity is None:
+        raise ValueError("No se pudo cargar el mapa de disparidad.")
+
+    # Convertir a float32 para cálculos precisos
+    disparity = disparity.astype(np.float32)
+    
+    # Normalizar la disparidad si está en el rango 0-255
+    # Asumiendo que los valores máximos de disparidad están alrededor de 128-256 píxeles
+    #disparity = disparity / 16.0  # Factor común en mapas de disparidad
+    
+    # Evitar divisiones por cero y valores muy pequeños
+    min_disparity = 0.1
+    disparity[disparity < min_disparity] = min_disparity
+
+    # Calcular el mapa de profundidad
+    depth_map = (focal_length * baseline) / disparity
+
+    # Aplicar límites razonables a la profundidad
+    depth_map[depth_map > 100] = 100  # Limitar a 100 metros
+    depth_map[depth_map < 0] = 0
+
+    # Normalizar para visualización
+    depth_map_normalized = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX)
+    depth_map_normalized = depth_map_normalized.astype(np.uint8)
+
+    # Aplicar un mapa de color para mejor visualización
+    depth_map_colored = cv2.applyColorMap(depth_map_normalized, cv2.COLORMAP_INFERNO)
+
+    return depth_map_colored
+
 
 # Función para detección de objetos y calcular la distancia usando la disparidad
 def object_detection_with_disparity():
@@ -423,8 +434,24 @@ with gr.Blocks(theme=seafoam) as demo:
         )
 
         run_button = gr.Button("Run Inference", elem_id="inference-button")
-        output_image = gr.Plot(label="Depth Map", visible=True)
+        output_image = gr.Image(label="Disparity Map", visible=True)
         run_button.click(stereo_inference, inputs=[image_path_left, image_path_right], outputs=output_image)
+
+        generate_depth_button = gr.Button("Generate Depth Map", elem_id="depth-button")
+        depth_image = gr.Image(label="Depth Map", visible=True)
+
+        # Conectar el botón con la función
+        def display_depth_map():
+            global stereo_output_image
+            if stereo_output_image is None:
+                raise ValueError("Primero debe generar el mapa de disparidad.")
+            
+            depth_map_colored = generate_depth_map(stereo_output_image)
+            depth_output_path = "./outputs/depth_map.png"
+            cv2.imwrite(depth_output_path, depth_map_colored)  # Guardar el mapa normalizado para visualización
+            return gr.update(value=depth_output_path, visible=True)
+
+        generate_depth_button.click(display_depth_map, inputs=[], outputs=depth_image)
 
         gr.HTML("""
         <style>
