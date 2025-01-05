@@ -60,7 +60,8 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     if not isinstance(image_path_left, str) or not isinstance(image_path_right, str):
         raise ValueError("Las entradas deben ser rutas de archivo o imágenes numpy.ndarray.")
 
-    global stereo_output_image
+    global stereo_output_image, image_path_left_original
+    image_path_left_original = image_path_left
     dataset_name = "custom_dataset"
     output = "./resultados_kitti"
     resume_path = "./stereo/NMRF/pretrained/kitti.pth"
@@ -82,7 +83,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     # En caso de que no se encuentre un archivo, lanzar un error
     raise FileNotFoundError("No se encontró ninguna imagen generada en la carpeta de resultados.")
 
-def generate_depth_map(disparity_path, focal_length=721.5377, baseline=0.54):
+def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
     """
     Genera un mapa de profundidad a partir de un mapa de disparidad.
     """
