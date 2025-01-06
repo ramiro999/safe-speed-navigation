@@ -151,7 +151,42 @@ def object_detection_with_disparity():
 
     # Procesar información de objetos detectados
     objects_info = []
-    cards_html = ""  # Variable para almacenar HTML de las tarjetas mejoradas
+    cards_html = """
+    <style>
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+        .card {
+            background-color: #2c2f33;
+            color: #ffffff;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            text-align: left;
+        }
+        .card h3 {
+            margin: 10px 0;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+        }
+        .card h3 img {
+            width: 24px;
+            margin-right: 10px;
+        }
+        .card p {
+            font-size: 16px;
+            margin: 5px 0;
+        }
+    </style>
+    <div class="grid-container">
+    """  # Variable para almacenar HTML de las tarjetas en grilla
 
     for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):
         cx, cy, w, h = bbox
@@ -180,16 +215,20 @@ def object_detection_with_disparity():
 
         # Tarjeta para el objeto detectado
         cards_html += f"""
-        <div style="background-color: #2c2f33; color: #ffffff; border-radius: 10px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-            <h3 style="margin-bottom: 10px; display: flex; align-items: center;">
-                <img src="https://img.icons8.com/color/48/000000/car--v1.png" alt="Object Icon" style="width: 35px; height: 35px; margin-right: 10px;"> Object ID: {idx}
+        <div class="card">
+            <h3>
+                <img src="https://img.icons8.com/color/48/000000/car--v1.png" alt="Object Icon">
+                Object ID: {idx}
             </h3>
-            <p style="margin: 5px 0;"><strong>Class:</strong> {COCO_INSTANCE_CATEGORY_NAMES[label]}</p>
-            <p style="margin: 5px 0;"><strong>Height:</strong> {height_bb} pixels</p>
-            <p style="margin: 5px 0;"><strong>Coordinates:</strong> ({x0}, {y0}) to ({x1}, {y1})</p>
-            <p style="margin: 5px 0;"><strong>Average Distance:</strong> {avg_distance:.2f} meters</p>
+            <p><strong>Class:</strong> {COCO_INSTANCE_CATEGORY_NAMES[label]}</p>
+            <p><strong>Height:</strong> {height_bb} pixels</p>
+            <p><strong>Coordinates:</strong> ({x0}, {y0}) to ({x1}, {y1})</p>
+            <p><strong>Average Distance:</strong> {avg_distance:.2f} meters</p>
         </div>
         """
+
+    # Finalizar el contenedor de la grilla
+    cards_html += "</div>"
 
     # Visualizar y guardar resultados en Plotly
     fig = go.Figure()
@@ -427,6 +466,24 @@ with gr.Blocks(theme=seafoam) as demo:
             #inference-button:hover {
                 background-color: #688581;
             }
+
+           #depth-button {
+                background-color: #2b3b46;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                margin: 4px 2px;
+                cursor: pointer;
+                border-radius: 8px;
+            }
+            #depth-button:hover {
+                background-color: #688581;
+            }    
+                    
+
         </style>
         <p style="text-align: center;">Upload a pair of stereo images or choose the Example Stereo Images below, to perform stereo inference and generate the disparity map.</p>
         """)
@@ -466,26 +523,6 @@ with gr.Blocks(theme=seafoam) as demo:
             return gr.update(value=depth_output_path, visible=True)
 
         generate_depth_button.click(display_depth_map, inputs=[], outputs=depth_image)
-
-        gr.HTML("""
-        <style>
-            #inference-button {
-                background-color: #2b3b46;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                text-align: center;
-                text-decoration: none;
-                display: inline-block;
-                margin: 4px 2px;
-                cursor: pointer;
-                border-radius: 8px;
-            }
-            #run-inference-button:hover {
-                background-color: #688581;
-            }
-        </style>
-        """)
 
     with gr.Tab("Object Detection"):
         gr.Markdown("## Object Detection", elem_id="object-detection-title")
