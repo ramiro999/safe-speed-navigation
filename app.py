@@ -165,7 +165,7 @@ def object_detection_with_disparity():
 
         # Calcular distancia promedio en región válida
         if bbox_valid.any() and bbox_disp[bbox_valid].mean() != 0:
-            avg_distance = bbox_disp[bbox_valid].mean() / 100  # Convertir a metros
+            avg_distance = bbox_disp[bbox_valid].mean()  # Calcular la distancia promedio
         else:
             avg_distance = float('inf')  # Si no hay valores válidos o la disparidad es cero
 
@@ -240,22 +240,33 @@ def object_detection_with_disparity():
 
 
 # Función para el cálculo de distancia utilizando gráficos interactivos de Plotly
-def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids):
+def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_id):
     global objects_info
 
-    # Asegurarse de que se seleccionen objetos
-    if not selected_object_ids:
-        raise ValueError("Debe seleccionar al menos un objeto para calcular la distancia.")
+    if selected_object_id is None:
+        return gr.Warning("⚠️ Please select at least one detected object to calculate the distance.")
 
-    # Filtrar los objetos seleccionados
+    # Ensure selected_object_id is a list
+    selected_object_ids = [selected_object_id] if isinstance(selected_object_id, int) else selected_object_id
+
+    # Filter selected objects
     selected_objects = [obj for obj in objects_info if obj['id'] in selected_object_ids]
+
     if not selected_objects:
-        raise ValueError("Ninguno de los objetos seleccionados es válido.")
+        return gr.Warning("⚠️ Selected object ID not found in the detected objects.")
+    
+    # Verifica que las distancias de los objetos sean numéricas y válidas
+    distances = [obj.get('distance', None) for obj in selected_objects if isinstance(obj.get('distance', None), (int, float))]
+    distances = [dist for dist in distances if not (np.isinf(dist) or np.isnan(dist))]
 
-    # Calcular la altura y distancia promedio de los objetos seleccionados
+    if not distances:
+        return gr.Warning("⚠️ None of the selected objects have valid distances.")
+
+    # Calculate average height and distance of selected objects
     avg_height = np.mean([obj['height'] for obj in selected_objects])
-    avg_distance = np.mean([obj['distance'] for obj in selected_objects])
+    avg_distance = np.mean(distances)
 
+    # Calculate decision graph using lookahead distance function
     fig1, fig2, fig3, fig4 = calculate_lookahead_distance(
         mu=mu,
         t=t,
@@ -268,7 +279,9 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object
         object_distance=avg_distance,
         image_path=None
     )
+
     return fig1, fig2, fig3, fig4
+
 
 
 def update_vehicle_params(vehicle_model):
@@ -426,7 +439,7 @@ with gr.Blocks(theme=seafoam) as demo:
         gr.HTML('<div class="example-label">Example Stereo Images</div>')
         examples = gr.Examples(
             examples=[
-            ["./stereo_images/images_left/000106_11.png", "./stereo_images/images_right/000106_11.png"],
+            ["./stereo_images/images_left/000101_10.png", "./stereo_images/images_right/000101_10.png"],
             ["./stereo_images/images_left/000070_11.png", "./stereo_images/images_right/000070_11.png"],
             ["./stereo_images/images_left/000108_10.png", "./stereo_images/images_right/000108_10.png"],
             ["./stereo_images/images_left/000194_11.png", "./stereo_images/images_right/000194_11.png"]
@@ -525,8 +538,8 @@ with gr.Blocks(theme=seafoam) as demo:
                     outputs=[turning_car, cog, wheelbase]
                 )
         
-        # CheckboxGroup para seleccionar los objetos detectados
-        selected_object_ids = gr.CheckboxGroup(label="Select Object(s) by ID", choices=[], interactive=True)    
+        # Radio para seleccionar los objetos detectados
+        selected_object_ids = gr.Radio(label="Select Object by ID", choices=[], interactive=True)
         load_button = gr.Button("Load Object Heights", elem_id="inference-button")
         
         run_button = gr.Button("Calculate Distance", elem_id="inference-button")
@@ -543,7 +556,7 @@ with gr.Blocks(theme=seafoam) as demo:
         # Conexión la función calculate_distance con los componentes de entrada/salida
         run_button.click(calculate_distance, inputs=[mu, t, l, B, turning_car, cog, wheelbase, selected_object_ids], outputs=[distance_plot1, distance_plot2, distance_plot3, distance_plot4])
 
-        # Acción del botón "Load Object Heights" para actualizar las opciones del CheckboxGroup
+        # Acción del botón "Load Object Heights" para actualizar las opciones del Radio
         load_button.click(
             fn=lambda: gr.update(choices=[obj['id'] for obj in objects_info]),
             inputs=None,
