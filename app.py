@@ -127,10 +127,13 @@ def object_detection_with_disparity():
     if not stereo_output_image:
         return gr.Warning("A Stereo Inference output image has not been generated.")
 
-    # Leer la imagen de disparidad
-    disparity, valid = readDepthVKITTI(stereo_output_image) # Esta función es creada en el archivo stereo/NMRF/nmrf/utils/frame_utils.py e indica el mismo procesamiento que la funcion generate_depth_map
+    # Generar el mapa de profundidad usando la nueva función
+    depth_map_colored = generate_depth_map(stereo_output_image)
+    
+    # Convertir el mapa de profundidad coloreado a escala de grises para los cálculos
+    depth = cv2.cvtColor(depth_map_colored, cv2.COLOR_BGR2GRAY)
 
-    # Leer la imagen RGB original (una de las imágenes estéreo)
+    # Leer la imagen RGB original
     image = cv2.imread(image_path_left_original, cv2.IMREAD_COLOR)
 
     # Preprocesar la imagen para la entrada del modelo DETR
@@ -148,7 +151,7 @@ def object_detection_with_disparity():
 
     # Colores para las clases
     colors = px.colors.qualitative.Plotly
-
+    
     # Procesar información de objetos detectados
     objects_info = []
     cards_html = """
@@ -186,7 +189,7 @@ def object_detection_with_disparity():
         }
     </style>
     <div class="grid-container">
-    """  # Variable para almacenar HTML de las tarjetas en grilla
+    """
 
     for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):
         cx, cy, w, h = bbox
@@ -194,15 +197,16 @@ def object_detection_with_disparity():
         x1, y1 = int((cx + w / 2) * image.shape[1]), int((cy + h / 2) * image.shape[0])
         height_bb = abs(y1 - y0)
 
-        # Recortar región del mapa de disparidad correspondiente al bounding box
-        bbox_disp = disparity[y0:y1, x0:x1]
-        bbox_valid = valid[y0:y1, x0:x1]
+        # Recortar región del mapa de profundidad correspondiente al bounding box
+        bbox_depth = depth[y0:y1, x0:x1]
+        bbox_valid = bbox_depth[bbox_depth > 0]
 
-        # Calcular distancia promedio en región válida
-        if bbox_valid.any() and bbox_disp[bbox_valid].mean() != 0:
-            avg_distance = bbox_disp[bbox_valid].mean()  # Calcular la distancia promedio
+        # Calcular distancia media en región válida
+        if len(bbox_valid) > 0:
+            # Convertir el valor de profundidad normalizado (0-255) a metros
+            median_distance = np.median(bbox_valid) * (100/255)  # Limitando un rango de 0-100 metros para los valores de 0-255
         else:
-            avg_distance = float('inf')  # Si no hay valores válidos o la disparidad es cero
+            median_distance = float('inf')
 
         # Agregar información del objeto detectado
         objects_info.append({
@@ -210,7 +214,7 @@ def object_detection_with_disparity():
             'class': COCO_INSTANCE_CATEGORY_NAMES[label],
             'height': height_bb,
             'bbox': [x0, y0, x1, y1],
-            'distance': avg_distance
+            'distance': median_distance
         })
 
         # Tarjeta para el objeto detectado
@@ -223,7 +227,7 @@ def object_detection_with_disparity():
             <p><strong>Class:</strong> {COCO_INSTANCE_CATEGORY_NAMES[label]}</p>
             <p><strong>Height:</strong> {height_bb} pixels</p>
             <p><strong>Coordinates:</strong> ({x0}, {y0}) to ({x1}, {y1})</p>
-            <p><strong>Average Distance:</strong> {avg_distance:.2f} meters</p>
+            <p><strong>Average Distance:</strong> {median_distance:.2f} meters</p>
         </div>
         """
 
@@ -235,19 +239,19 @@ def object_detection_with_disparity():
 
     # Añadir la imagen original al gráfico
     fig.add_trace(go.Image(
-        z=image,  # La imagen se pasa en z
-        colormodel='rgb'  # Especificar el modelo de color correctamente
+        z=image,
+        colormodel='rgb'
     ))
 
-    # Añadir las cajas delimitadoras (bounding boxes) sobre la imagen
+    # Añadir las cajas delimitadoras sobre la imagen
     for obj in objects_info:
         x0, y0, x1, y1 = obj['bbox']
-        color = colors[COCO_INSTANCE_CATEGORY_NAMES.index(obj['class']) % len(colors)]  # Asignar un color basado en la clase del objeto
+        color = colors[COCO_INSTANCE_CATEGORY_NAMES.index(obj['class']) % len(colors)]
         fig.add_shape(
             type="rect",
             x0=x0, y0=y0, x1=x1, y1=y1,
             line=dict(color=color, width=2),
-            fillcolor=f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)"  # Color con transparencia
+            fillcolor=f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)"
         )
 
         # Añadir el texto con la distancia, ID y clase sobre la caja
@@ -262,7 +266,7 @@ def object_detection_with_disparity():
             borderpad=2
         )
 
-    # Ajustes de la figura para mejorar la visualización
+    # Ajustes de la figura
     fig.update_layout(
         xaxis=dict(showgrid=False, zeroline=False),
         yaxis=dict(showgrid=False, zeroline=False),
@@ -274,7 +278,6 @@ def object_detection_with_disparity():
     # Guardar el gráfico como imagen
     fig.write_image("./outputs/object_detection_results_with_distances_plotly.png")
 
-    # Devolver el gráfico interactivo
     return fig, cards_html
 
 
