@@ -36,7 +36,7 @@ model = load_detr_model()
 # Variable global para almacenar la imagen de salida de Stereo Inference
 stereo_output_image = None
 image_path_left_original = None
-objects_info = []  # Almacenar los objetos detectados
+objects_info = []  # Almacenar los objetos detectados en la imagen
 
 def save_temp_image(image_array):
     """
@@ -50,21 +50,21 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     """
     Realiza inferencia estéreo. Soporta tanto rutas de archivo como imágenes cargadas en memoria (numpy.ndarray).
     """
-    # Verificar si las entradas son numpy.ndarray y guardar en archivos temporales si es necesario
+    # Comprobar si las entradas son numpy.ndarray y se guardan archivos temporales si es necesario
     if isinstance(image_path_left, np.ndarray):
         image_path_left = save_temp_image(image_path_left)
     if isinstance(image_path_right, np.ndarray):
         image_path_right = save_temp_image(image_path_right)
 
-    # Asegurarse de que las entradas son rutas válidas
+    # Comprobar de que las imagenes se carguen correctamente
     if not isinstance(image_path_left, str) or not isinstance(image_path_right, str):
-        raise ValueError("Las entradas deben ser rutas de archivo o imágenes numpy.ndarray.")
+        return gr.Warning("Inputs must be file paths or numpy.ndarray images.")
 
-    global stereo_output_image, image_path_left_original
-    image_path_left_original = image_path_left
-    dataset_name = "custom_dataset"
+    global stereo_output_image, image_path_left_original # Variables globales para almacenar la imagen de salida y la imagen original
+    image_path_left_original = image_path_left 
+    dataset_name = "custom_dataset" 
     output = "./resultados_kitti"
-    resume_path = "./stereo/NMRF/pretrained/kitti.pth"
+    resume_path = "./stereo/NMRF/pretrained/kitti.pth" # Ruta del modelo pre-entrenado de KITTI 
 
     # Crear una lista con las imágenes de entrada proporcionadas por el usuario
     image_list = [(image_path_left, image_path_right)]
@@ -81,7 +81,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
         return gr.update(value=stereo_output_image, visible=True)
 
     # En caso de que no se encuentre un archivo, lanzar un error
-    raise FileNotFoundError("No se encontró ninguna imagen generada en la carpeta de resultados.")
+    raise FileNotFoundError("No generated image was found in the results folder.")
 
 def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
     """
@@ -124,11 +124,11 @@ def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725)
 # Función para detección de objetos y calcular la distancia usando la disparidad
 def object_detection_with_disparity():
     global stereo_output_image, image_path_left_original, objects_info
-    if stereo_output_image is None or image_path_left_original is None:
-        raise ValueError("No se ha generado una imagen de salida de Stereo Inference o no se ha proporcionado la imagen original.")
+    if not stereo_output_image:
+        return gr.Warning("A Stereo Inference output image has not been generated.")
 
     # Leer la imagen de disparidad
-    disparity, valid = readDepthVKITTI(stereo_output_image)
+    disparity, valid = readDepthVKITTI(stereo_output_image) # Esta función es creada en el archivo stereo/NMRF/nmrf/utils/frame_utils.py e indica el mismo procesamiento que la funcion generate_depth_map
 
     # Leer la imagen RGB original (una de las imágenes estéreo)
     image = cv2.imread(image_path_left_original, cv2.IMREAD_COLOR)
@@ -278,12 +278,12 @@ def object_detection_with_disparity():
     return fig, cards_html
 
 
-# Función para el cálculo de distancia utilizando gráficos interactivos de Plotly
+# Función para el cálculo de distancia segura y gráficos de decisión
 def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_id):
     global objects_info
 
     if selected_object_id is None:
-        return gr.Warning("⚠️ Please select at least one detected object to calculate the distance.")
+        return gr.Warning("Please select at least one detected object to calculate the distance.")
 
     # Ensure selected_object_id is a list
     selected_object_ids = [selected_object_id] if isinstance(selected_object_id, int) else selected_object_id
@@ -322,16 +322,15 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object
     return fig1, fig2, fig3, fig4
 
 
-
+# Función para actualizar los parámetros del vehículo según el modelo seleccionado
 def update_vehicle_params(vehicle_model):
-    if vehicle_model == "Volkswagen Passat (B6)":
-        return 11.4, 0.55, 2.71
-    elif vehicle_model == "Tesla S":
-        return 11.8, 0.46, 2.96
-    elif vehicle_model == "Toyota Supra":
-        return 10.40, 0.4953, 2.47
-    elif vehicle_model == "Ford Mustang Shelby GT350":
-        return 12.67, 0.4953, 2.72
+    vehicle_params = {
+        "Volkswagen Passat (B6)": (11.4, 0.55, 2.71),
+        "Tesla S": (11.8, 0.46, 2.96),
+        "Toyota Supra": (10.40, 0.4953, 2.47),
+        "Ford Mustang Shelby GT350": (12.67, 0.4953, 2.72)
+    }
+    return vehicle_params.get(vehicle_model, (0, 0, 0))
 
 # Diseño de la interfaz de Gradio
 class Seafoam(Base):
@@ -515,7 +514,7 @@ with gr.Blocks(theme=seafoam) as demo:
         def display_depth_map():
             global stereo_output_image
             if stereo_output_image is None:
-                raise ValueError("Primero debe generar el mapa de disparidad.")
+                return gr.Warning("Please run stereo inference first to generate the disparity map.")
             
             depth_map_colored = generate_depth_map(stereo_output_image)
             depth_output_path = "./outputs/depth_map.png"
@@ -595,7 +594,7 @@ with gr.Blocks(theme=seafoam) as demo:
 
         # Acción del botón "Load Object Heights" para actualizar las opciones del Radio
         load_button.click(
-            fn=lambda: gr.update(choices=[obj['id'] for obj in objects_info]),
+            fn=lambda: gr.update(choices=[obj['id'] for obj in objects_info]) if objects_info else gr.Warning("No detected objects found."),
             inputs=None,
             outputs=selected_object_ids,
         )
