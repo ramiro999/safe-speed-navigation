@@ -13,11 +13,15 @@ import plotly.graph_objects as go
 from typing import Union, Iterable
 from gradio.themes.utils import colors, fonts, sizes
 from gradio.themes.base import Base
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 # Importar módulos personalizados
 from autonomous_navigation_calculator import calculate_lookahead_distance
 from detr.image_processing import preprocess_image, plot_detr_results_with_distance
 from detr.model_loader import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
+from yolov11.model_loader_yolo import load_yolov11_model
+from yolov11.image_processing import draw_yolo_results
 
 # Añadir directorios al path
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
@@ -31,7 +35,11 @@ Función main para la interfaz de Gradio.
 """
  
 # Cargar el modelo DETR
-model = load_detr_model()
+detr_model = load_detr_model()
+yolov11_model = load_yolov11_model("yolo11n.pt")  # Carga el modelo YOLOv11
+
+# Variable para el modelo seleccionado
+selected_model = "DETR"  # Esto se actualizará según la selección del usuario
 
 # Variable global para almacenar la imagen de salida de Stereo Inference
 stereo_output_image = None
@@ -64,7 +72,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     image_path_left_original = image_path_left 
     dataset_name = "custom_dataset" 
     output = "./resultados_kitti"
-    resume_path = "./stereo/NMRF/pretrained/kitti.pth" # Ruta del modelo pre-entrenado de KITTI 
+    resume_path = "./stereo/NMRF/pretrained/kitti.pth" # Ruta del modelo pre-entrenado con KITTI 
 
     # Crear una lista con las imágenes de entrada proporcionadas por el usuario
     image_list = [(image_path_left, image_path_right)]
@@ -85,21 +93,17 @@ def stereo_inference(image_path_left=None, image_path_right=None):
 
 def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
     """
-    Genera un mapa de profundidad a partir de un mapa de disparidad.
+    Genera un mapa de profundidad con una barra de colores utilizando el colormap 'inferno' de Matplotlib.
     """
     # Cargar el mapa de disparidad
     disparity = cv2.imread(disparity_path, cv2.IMREAD_GRAYSCALE)
-    
+
     if disparity is None:
         raise ValueError("No se pudo cargar el mapa de disparidad.")
 
     # Convertir a float32 para cálculos precisos
     disparity = disparity.astype(np.float32)
-    
-    # Normalizar la disparidad si está en el rango 0-255
-    # Asumiendo que los valores máximos de disparidad están alrededor de 128-256 píxeles
-    #disparity = disparity / 16.0  # Factor común en mapas de disparidad
-    
+
     # Evitar divisiones por cero y valores muy pequeños
     min_disparity = 0.1
     disparity[disparity < min_disparity] = min_disparity
@@ -108,50 +112,63 @@ def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725)
     depth_map = (focal_length * baseline) / disparity
 
     # Aplicar límites razonables a la profundidad
-    depth_map[depth_map > 100] = 100  # Limitar a 100 metros
+    depth_map[depth_map > 100] = 100
     depth_map[depth_map < 0] = 0
 
     # Normalizar para visualización
-    depth_map_normalized = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX)
-    depth_map_normalized = depth_map_normalized.astype(np.uint8)
+    depth_map_normalized = cv2.normalize(depth_map, None, 0, 1, cv2.NORM_MINMAX)
 
-    # Aplicar un mapa de color para mejor visualización
-    depth_map_colored = cv2.applyColorMap(depth_map_normalized, cv2.COLORMAP_INFERNO)
+    # Aplicar colormap 'inferno' de Matplotlib
+    colormap = cm.get_cmap('inferno')
+    depth_map_colored = (colormap(depth_map_normalized)[:, :, :3] * 255).astype(np.uint8)
 
-    return depth_map_colored
+    # Crear figura con barra de colores
+    fig, ax = plt.subplots(figsize=(10, 5))
+    cax = ax.imshow(depth_map_colored, cmap='inferno')
+    cbar = fig.colorbar(cm.ScalarMappable(cmap='inferno'), ax=ax, orientation='horizontal', label='Depth (normalized)')
+    cbar.set_ticks([0, 0.25, 0.5, 0.75, 1.0])  # Valores clave en el rango normalizado
+    cbar.ax.set_xticklabels(['0', '25', '50', '75', '100'])  # Escala en metros
+    plt.axis('off')
 
+    # Guardar el resultado con colorbar
+    output_path_with_colorbar = "./outputs/depth_with_colorbar.png"
+    plt.savefig(output_path_with_colorbar, bbox_inches='tight', pad_inches=0)
+    plt.close()
+
+    return output_path_with_colorbar
 
 # Función para detección de objetos y calcular la distancia usando la disparidad
-def object_detection_with_disparity():
+def object_detection_with_disparity(selected_model_name):
     global stereo_output_image, image_path_left_original, objects_info
+
     if not stereo_output_image:
-        return gr.Warning("A Stereo Inference output image has not been generated.")
+        return None, gr.Warning("A Stereo Inference output image has not been generated.")
 
-    # Generar el mapa de profundidad usando la nueva función
+    # Generar el mapa de profundidad
     depth_map_colored = generate_depth_map(stereo_output_image)
-    
-    # Convertir el mapa de profundidad coloreado a escala de grises para los cálculos
     depth = cv2.cvtColor(depth_map_colored, cv2.COLOR_BGR2GRAY)
-
-    # Leer la imagen RGB original
     image = cv2.imread(image_path_left_original, cv2.IMREAD_COLOR)
 
-    # Preprocesar la imagen para la entrada del modelo DETR
-    _, image_tensor = preprocess_image(image)
+    bboxes, labels = [], []  # Inicializar variables comunes
 
-    with torch.no_grad():
-        outputs = model(image_tensor)
+    if selected_model_name == "DETR":
+        # Procesar con DETR
+        _, image_tensor = preprocess_image(image)
+        with torch.no_grad():
+            outputs = detr_model(image_tensor)
+        probas = outputs['pred_logits'].softmax(-1)[0, :, :-1]
+        keep = probas.max(-1).values > 0.8
+        bboxes = outputs['pred_boxes'][0, keep].numpy()
+        labels = probas[keep].argmax(-1).numpy()
 
-    # Filtrar las predicciones con alta confianza
-    probas = outputs['pred_logits'].softmax(-1)[0, :, :-1]
-    keep = probas.max(-1).values > 0.8
+    elif selected_model_name == "YOLOv11":
+        # Procesar con YOLOv11
+        results = yolov11_model(image_path_left_original)
+        bboxes = [box.xyxy[0].tolist() for box in results[0].boxes]
+        labels = [int(box.cls[0]) for box in results[0].boxes]
+    else:
+        return None, gr.Warning("Invalid model selected.")
 
-    bboxes = outputs['pred_boxes'][0, keep].numpy()
-    labels = probas[keep].argmax(-1).numpy()
-
-    # Colores para las clases
-    colors = px.colors.qualitative.Plotly
-    
     # Procesar información de objetos detectados
     objects_info = []
     cards_html = """
@@ -192,9 +209,13 @@ def object_detection_with_disparity():
     """
 
     for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):
-        cx, cy, w, h = bbox
-        x0, y0 = int((cx - w / 2) * image.shape[1]), int((cy - h / 2) * image.shape[0])
-        x1, y1 = int((cx + w / 2) * image.shape[1]), int((cy + h / 2) * image.shape[0])
+        if selected_model_name == "DETR":
+            cx, cy, w, h = bbox
+            x0, y0 = int((cx - w / 2) * image.shape[1]), int((cy - h / 2) * image.shape[0])
+            x1, y1 = int((cx + w / 2) * image.shape[1]), int((cy + h / 2) * image.shape[0])
+        elif selected_model_name == "YOLOv11":
+            x0, y0, x1, y1 = map(int, bbox)
+
         height_bb = abs(y1 - y0)
 
         # Recortar región del mapa de profundidad correspondiente al bounding box
@@ -203,8 +224,7 @@ def object_detection_with_disparity():
 
         # Calcular distancia media en región válida
         if len(bbox_valid) > 0:
-            # Convertir el valor de profundidad normalizado (0-255) a metros
-            median_distance = np.median(bbox_valid) * (100/255)  # Limitando un rango de 0-100 metros para los valores de 0-255
+            median_distance = np.median(bbox_valid) * (100 / 255)  # Limitar rango de 0-100 metros para valores 0-255
         else:
             median_distance = float('inf')
 
@@ -246,12 +266,11 @@ def object_detection_with_disparity():
     # Añadir las cajas delimitadoras sobre la imagen
     for obj in objects_info:
         x0, y0, x1, y1 = obj['bbox']
-        color = colors[COCO_INSTANCE_CATEGORY_NAMES.index(obj['class']) % len(colors)]
+        color = px.colors.qualitative.Plotly[COCO_INSTANCE_CATEGORY_NAMES.index(obj['class']) % len(px.colors.qualitative.Plotly)]
         fig.add_shape(
             type="rect",
             x0=x0, y0=y0, x1=x1, y1=y1,
-            line=dict(color=color, width=2),
-            fillcolor=f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)"
+            line=dict(color=color, width=2)
         )
 
         # Añadir el texto con la distancia, ID y clase sobre la caja
@@ -259,14 +278,9 @@ def object_detection_with_disparity():
             x=(x0 + x1) / 2, y=y0 - 10,
             text=f"ID: {obj['id']} Class: {obj['class']} Dist: {obj['distance']:.2f} m",
             showarrow=False,
-            font=dict(color=color, size=12),
-            bgcolor="rgba(0, 0, 0, 0.5)",
-            bordercolor=color,
-            borderwidth=1,
-            borderpad=2
+            font=dict(color=color, size=12)
         )
 
-    # Ajustes de la figura
     fig.update_layout(
         xaxis=dict(showgrid=False, zeroline=False),
         yaxis=dict(showgrid=False, zeroline=False),
@@ -275,10 +289,8 @@ def object_detection_with_disparity():
         margin=dict(t=0, b=40, l=0, r=0),
     )
 
-    # Guardar el gráfico como imagen
-    fig.write_image("./outputs/object_detection_results_with_distances_plotly.png")
-
     return fig, cards_html
+
 
 
 # Función para el cálculo de distancia segura y gráficos de decisión
@@ -518,11 +530,13 @@ with gr.Blocks(theme=seafoam) as demo:
             global stereo_output_image
             if stereo_output_image is None:
                 return gr.Warning("Please run stereo inference first to generate the disparity map.")
-            
-            depth_map_colored = generate_depth_map(stereo_output_image)
-            depth_output_path = "./outputs/depth_map.png"
-            cv2.imwrite(depth_output_path, depth_map_colored)  # Guardar el mapa normalizado para visualización
-            return gr.update(value=depth_output_path, visible=True)
+
+            # Generar el mapa de profundidad con la barra de colores
+            depth_output_path_with_colorbar = generate_depth_map(stereo_output_image)
+
+            # Devolver la imagen generada directamente
+            return gr.update(value=depth_output_path_with_colorbar, visible=True)
+
 
         generate_depth_button.click(display_depth_map, inputs=[], outputs=depth_image)
 
@@ -537,11 +551,15 @@ with gr.Blocks(theme=seafoam) as demo:
                 
         <p style="text-align: center;">Perform object detection on the original left image using the detected objects from the disparity map.</p>
         """)
+        gr.Markdown("# Select Detection Model")
+        model_selector = gr.Radio(["DETR", "YOLOv11"], label="Detection Model", value="DETR")
+
+
         run_button = gr.Button("Run Detection", elem_id="inference-button")
         detect_output_image = gr.Plot(label="Object Detection", visible=True)
         cards_placeholder = gr.HTML(label="Detected Objects Info", visible=True)
     
-    run_button.click(object_detection_with_disparity, outputs=[detect_output_image, cards_placeholder])
+    run_button.click(object_detection_with_disparity, inputs=[model_selector], outputs=[detect_output_image, cards_placeholder])
 
     with gr.Tab("Safe speed distance"):
         gr.Markdown("## Safe distance calculation section", elem_id="calculate-distance-title")
