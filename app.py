@@ -93,7 +93,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
 
 def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
     """
-    Genera un mapa de profundidad con una barra de colores utilizando el colormap 'inferno' de Matplotlib.
+    Genera un mapa de profundidad con una barra de colores en el rango 0-255.
     """
     # Cargar el mapa de disparidad
     disparity = cv2.imread(disparity_path, cv2.IMREAD_GRAYSCALE)
@@ -115,27 +115,73 @@ def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725)
     depth_map[depth_map > 100] = 100
     depth_map[depth_map < 0] = 0
 
-    # Normalizar para visualización
-    depth_map_normalized = cv2.normalize(depth_map, None, 0, 1, cv2.NORM_MINMAX)
-
-    # Aplicar colormap 'inferno' de Matplotlib
-    colormap = cm.get_cmap('inferno')
-    depth_map_colored = (colormap(depth_map_normalized)[:, :, :3] * 255).astype(np.uint8)
+    # Normalizar para visualización en el rango 0-255
+    depth_map_normalized = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX)
 
     # Crear figura con barra de colores
-    fig, ax = plt.subplots(figsize=(10, 5))
-    cax = ax.imshow(depth_map_colored, cmap='inferno')
-    cbar = fig.colorbar(cm.ScalarMappable(cmap='inferno'), ax=ax, orientation='horizontal', label='Depth (normalized)')
-    cbar.set_ticks([0, 0.25, 0.5, 0.75, 1.0])  # Valores clave en el rango normalizado
-    cbar.ax.set_xticklabels(['0', '25', '50', '75', '100'])  # Escala en metros
-    plt.axis('off')
+    fig, ax = plt.subplots(figsize=(10, 5), dpi=300, frameon=False)
+    im = ax.imshow(depth_map_normalized, cmap='inferno', vmin=0, vmax=255)
+    
+    # Agregar colorbar con rango 0-255
+    cbar = fig.colorbar(im, ax=ax, orientation='horizontal', label='Depth')
+    cbar.set_ticks([0, 64, 128, 192, 255])  # Valores clave en el rango
+    cbar.ax.set_xticklabels(['0', '64', '128', '192', '255'])  # Escala en el rango 0-255
+    
+    ax.axis('off')
 
-    # Guardar el resultado con colorbar
-    output_path_with_colorbar = "./outputs/depth_with_colorbar.png"
-    plt.savefig(output_path_with_colorbar, bbox_inches='tight', pad_inches=0)
+    # Eliminar completamente márgenes blancos
+    plt.gca().spines['top'].set_visible(False)
+    plt.gca().spines['right'].set_visible(False)
+    plt.gca().spines['left'].set_visible(False)
+    plt.gca().spines['bottom'].set_visible(False)
+
+    # Ajustar diseño para eliminar cualquier espacio
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0.1)
+
+    # Guardar el resultado
+    output_path_with_colorbar = "./outputs/depth_with_colorbar_0_255.png"
+    plt.savefig(output_path_with_colorbar, bbox_inches='tight', pad_inches=0, dpi=300, transparent=True)
     plt.close()
 
     return output_path_with_colorbar
+
+def only_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
+    """
+    Genera un mapa de profundidad a partir de un mapa de disparidad.
+    """
+    # Cargar el mapa de disparidad
+    disparity = cv2.imread(disparity_path, cv2.IMREAD_GRAYSCALE)
+    
+    if disparity is None:
+        raise ValueError("No se pudo cargar el mapa de disparidad.")
+
+    # Convertir a float32 para cálculos precisos
+    disparity = disparity.astype(np.float32)
+    
+    # Normalizar la disparidad si está en el rango 0-255
+    # Asumiendo que los valores máximos de disparidad están alrededor de 128-256 píxeles
+    #disparity = disparity / 16.0  # Factor común en mapas de disparidad
+    
+    # Evitar divisiones por cero y valores muy pequeños
+    min_disparity = 0.1
+    disparity[disparity < min_disparity] = min_disparity
+
+    # Calcular el mapa de profundidad
+    depth_map = (focal_length * baseline) / disparity
+
+    # Aplicar límites razonables a la profundidad
+    depth_map[depth_map > 100] = 100  # Limitar a 100 metros
+    depth_map[depth_map < 0] = 0
+
+    # Normalizar para visualización
+    depth_map_normalized = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX)
+    depth_map_normalized = depth_map_normalized.astype(np.uint8)
+
+    # Aplicar un mapa de color para mejor visualización
+    depth_map_colored = cv2.applyColorMap(depth_map_normalized, cv2.COLORMAP_INFERNO)
+
+    return depth_map_colored
+
 
 # Función para detección de objetos y calcular la distancia usando la disparidad
 def object_detection_with_disparity(selected_model_name):
@@ -145,7 +191,7 @@ def object_detection_with_disparity(selected_model_name):
         return None, gr.Warning("A Stereo Inference output image has not been generated.")
 
     # Generar el mapa de profundidad
-    depth_map_colored = generate_depth_map(stereo_output_image)
+    depth_map_colored = only_depth_map(stereo_output_image)
     depth = cv2.cvtColor(depth_map_colored, cv2.COLOR_BGR2GRAY)
     image = cv2.imread(image_path_left_original, cv2.IMREAD_COLOR)
 
