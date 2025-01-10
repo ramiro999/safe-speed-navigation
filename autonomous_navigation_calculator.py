@@ -332,10 +332,10 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     if object_distance is not None:
 
         # Indice del valor más cercano a la distancia del objeto para la cota
-        index_obj_distance = (np.abs(d_look_stop - object_distance)).argmin()
+        index_obj_distance = (np.abs(d_look_swerve - object_distance)).argmin()
 
         fig4.add_trace(go.Scatter(
-        x=[v_kph[index_obj_distance]], y=[d_look_stop[index_obj_distance]], 
+        x=[v_kph[index_obj_distance]], y=[d_look_swerve[index_obj_distance]], 
         mode='markers+text', 
         name='Selected Object',
         text=[f'Object Distance: {object_distance:.2f} m'],

@@ -21,7 +21,7 @@ from autonomous_navigation_calculator import calculate_lookahead_distance
 from detr.image_processing import preprocess_image, plot_detr_results_with_distance
 from detr.model_loader import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
 from yolov11.model_loader_yolo import load_yolov11_model
-from yolov11.image_processing import draw_yolo_results
+from yolov11.image_processing_yolo import draw_yolo_results
 
 # Añadir directorios al path
 sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
@@ -36,7 +36,10 @@ Función main para la interfaz de Gradio.
  
 # Cargar el modelo DETR
 detr_model = load_detr_model()
-yolov11_model = load_yolov11_model("yolo11n.pt")  # Carga el modelo YOLOv11
+
+# Cargar el modelo YOLOv11
+yolo_model_path = "./yolov11/model/yolo11s.pt"
+yolov11_model = load_yolov11_model(yolo_model_path)  # Carga el modelo YOLOv11
 
 # Variable para el modelo seleccionado
 selected_model = "DETR"  # Esto se actualizará según la selección del usuario
@@ -58,7 +61,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     """
     Realiza inferencia estéreo. Soporta tanto rutas de archivo como imágenes cargadas en memoria (numpy.ndarray).
     """
-    # Comprobar si las entradas son numpy.ndarray y se guardan archivos temporales si es necesario
+    # Comprobar si las entradas son numpy.ndarray y se guardan archivos temporales si es necesario.
     if isinstance(image_path_left, np.ndarray):
         image_path_left = save_temp_image(image_path_left)
     if isinstance(image_path_right, np.ndarray):
@@ -72,7 +75,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     image_path_left_original = image_path_left 
     dataset_name = "custom_dataset" 
     output = "./resultados_kitti"
-    resume_path = "./stereo/NMRF/pretrained/kitti.pth" # Ruta del modelo pre-entrenado con KITTI 
+    resume_path = "./stereo/NMRF/pretrained/sceneflow.pth" # Ruta del modelo pre-entrenado con KITTI 
 
     # Crear una lista con las imágenes de entrada proporcionadas por el usuario
     image_list = [(image_path_left, image_path_right)]
@@ -124,8 +127,13 @@ def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725)
     
     # Agregar colorbar con rango 0-255
     cbar = fig.colorbar(im, ax=ax, orientation='horizontal', label='Depth')
+    cbar.ax.xaxis.label.set_color('white')
+    cbar.ax.tick_params(color='white')  
+    cbar.ax.xaxis.set_tick_params(color='white')
+    plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='white')  # Cambiar el color de las etiquetas a blanco
     cbar.set_ticks([0, 64, 128, 192, 255])  # Valores clave en el rango
     cbar.ax.set_xticklabels(['0', '64', '128', '192', '255'])  # Escala en el rango 0-255
+
     
     ax.axis('off')
 
@@ -256,6 +264,9 @@ def object_detection_with_disparity(selected_model_name):
 
     for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):
         if selected_model_name == "DETR":
+            if label < 0 or label >= len(COCO_INSTANCE_CATEGORY_NAMES):
+                print(f"Invalid label detected: {label}")
+                continue
             cx, cy, w, h = bbox
             x0, y0 = int((cx - w / 2) * image.shape[1]), int((cy - h / 2) * image.shape[0])
             x1, y1 = int((cx + w / 2) * image.shape[1]), int((cy + h / 2) * image.shape[0])
@@ -270,7 +281,7 @@ def object_detection_with_disparity(selected_model_name):
 
         # Calcular distancia media en región válida
         if len(bbox_valid) > 0:
-            median_distance = np.median(bbox_valid) * (100 / 255)  # Limitar rango de 0-100 metros para valores 0-255
+            median_distance = np.median(bbox_valid) #* (100 / 255)  # Limitar rango de 0-100 metros para valores 0-255
         else:
             median_distance = float('inf')
 
@@ -283,17 +294,31 @@ def object_detection_with_disparity(selected_model_name):
             'distance': median_distance
         })
 
+        # Diccionario para las imagenes de las clases seleccionadas
+        CLASS_IMAGES = {
+            'car': 'https://img.icons8.com/color/48/000000/car--v1.png',
+            'traffic light': 'https://i.ibb.co/KG6PrDH/icons8-traffic-lights-sign-96.png',
+            'person': 'https://i.ibb.co/3zFHGg2/icons8-person-96-2.png',
+            'bicycle': 'https://i.ibb.co/d4tnFHP/icons8-bicycle-100.png',
+            'bus': 'https://i.ibb.co/0f20RxR/icons8-bus-96.png',
+            'truck': 'https://i.ibb.co/HD53Wtq/icons8-truck-96.png'
+        }
+
+        def get_class_icon(class_name):
+            return CLASS_IMAGES.get(class_name, 'https://img.icons8.com/color/48/000000/car--v1.png')
+
+
         # Tarjeta para el objeto detectado
         cards_html += f"""
         <div class="card">
             <h3>
-                <img src="https://img.icons8.com/color/48/000000/car--v1.png" alt="Object Icon">
+                <img src={get_class_icon(COCO_INSTANCE_CATEGORY_NAMES[label])} alt="Object Icon">
                 Object ID: {idx}
             </h3>
             <p><strong>Class:</strong> {COCO_INSTANCE_CATEGORY_NAMES[label]}</p>
             <p><strong>Height:</strong> {height_bb} pixels</p>
             <p><strong>Coordinates:</strong> ({x0}, {y0}) to ({x1}, {y1})</p>
-            <p><strong>Average Distance:</strong> {median_distance:.2f} meters</p>
+            <p><strong>Distance:</strong> {median_distance:.2f} meters</p>
         </div>
         """
 
@@ -336,8 +361,6 @@ def object_detection_with_disparity(selected_model_name):
     )
 
     return fig, cards_html
-
-
 
 # Función para el cálculo de distancia segura y gráficos de decisión
 def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_id):
@@ -556,13 +579,15 @@ with gr.Blocks(theme=seafoam) as demo:
         gr.HTML('<div class="example-label">Example Stereo Images</div>')
         examples = gr.Examples(
             examples=[
-            ["./stereo_images/images_left/000101_10.png", "./stereo_images/images_right/000101_10.png"],
+            ["./stereo_images/images_left/000005_10.png", "./stereo_images/images_right/000005_10.png"],
             ["./stereo_images/images_left/000070_11.png", "./stereo_images/images_right/000070_11.png"],
-            ["./stereo_images/images_left/000108_10.png", "./stereo_images/images_right/000108_10.png"],
+            ["./stereo_images/images_left/000179_11.png", "./stereo_images/images_right/000179_11.png"],
             ["./stereo_images/images_left/000194_11.png", "./stereo_images/images_right/000194_11.png"]
             ],
             inputs=[image_path_left, image_path_right]
         )
+        #164_10
+
 
         run_button = gr.Button("Run Inference", elem_id="inference-button")
         output_image = gr.Image(label="Disparity Map", visible=True)
