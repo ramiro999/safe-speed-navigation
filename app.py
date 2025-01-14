@@ -946,7 +946,7 @@ with gr.Blocks(theme=seafoam) as demo:
     run_button.click(object_detection_with_disparity, inputs=[model_selector], outputs=[detect_output_image, cards_placeholder])
 
     with gr.Tab("Safe speed distance"):
-        gr.Markdown("## Safe distance calculation section", elem_id="calculate-distance-title")
+        gr.Markdown("## Safe speed calculation section", elem_id="calculate-distance-title")
         gr.HTML("""
         <style>
             #calculate-distance-title {
