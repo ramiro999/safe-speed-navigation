@@ -12,6 +12,50 @@ Script para calcular las distancias de frenado y esquiva para un vehículo autó
 # Cargar el modelo
 model = load_detr_model()
 
+def set_plot_style(is_dark_mode=False):
+    """
+    Define los estilos de diseño para gráficos Plotly en modo oscuro o claro.
+    
+    Args:
+        is_dark_mode (bool): Si es True, aplica el tema oscuro; de lo contrario, aplica el tema claro.
+
+    Returns:
+        dict: Parámetros de estilo para el diseño de gráficos.
+    """
+    if is_dark_mode:
+        return {
+            'paper_bgcolor': 'rgba(0,0,0,0)',  # Fondo del papel transparente (oscuro)
+            'plot_bgcolor': 'rgba(0,0,0,0)',  # Fondo del gráfico transparente (oscuro)
+            'font': dict(color='white'),      # Texto blanco
+            'line_color': {
+                'lime': 'lime',
+                'red': 'red',
+                'yellow': 'yellow',
+                'cyan': 'cyan',
+                'magenta': 'magenta',
+                'orange': 'orange',
+                'aqua': 'aqua'
+            }
+        }
+    else:
+        return {
+            'paper_bgcolor': 'rgba(255,255,255,1)',  # Fondo del papel blanco
+            'plot_bgcolor': 'rgba(240,240,240,1)',  # Fondo del gráfico claro
+            'font': dict(color='black'),            # Texto negro
+            'line_color': {
+                'lime': '#32CD32',
+                'red': '#FF4500',
+                'yellow': '#FFD700',
+                'cyan': '#00FFFF',
+                'magenta': '#FF00FF',
+                'orange': '#FFA500',
+                'aqua': '#00CED1'
+            }
+        }
+
+
+
+
 def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, object_height=None, object_distance=None, image_path=None):
     """
     Calcula las distancias de frenado y esquiva para un vehículo autónomo en función de los parámetros de entrada.
@@ -34,6 +78,10 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     - fig3: Gráfico interactivo de Distancia de frenado.
     - fig4: Gráfico interactivo de Distancia de esquiva.
     """
+
+
+    is_dark_mode = False
+    style = set_plot_style(is_dark_mode)
     
     # Parámetros fijos para el modelo 
     g = 9.81
@@ -80,9 +128,6 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     HFOV = np.zeros_like(v_mtps)
     hc = 1.65  # Altura de la cámara, dataset KITTI 1.65 m
     thetaSlope = np.deg2rad(15)  # Ángulo de la pendiente, por lo general 15 grados
-
-
-    # ME FALTA ANALIZAR POR QUE THETAMIN Y THETAMAX SON DIFERENTES
     
     thetaMin = np.arctan(hc / d_look_stop)  # Ángulo debajo del horizonte determinado por la distancia de frenado
     thetaMax = np.arctan(hc / d_offset)  # Ángulo debajo del horizonte determinado por la longitud de la base B (longitud del automóvil)
@@ -91,25 +136,32 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     for v in range(1, 151):
         HFOV[v - 1] = d_look_stop[v - 1] / turning[v - 1]
 
-    # Gráfico interactivo 1: Lookahead Distance ----------------------------------------------------------------------------------
+# Gráfico 1: Angle of View (AOV)
+    HFOV = d_look_stop / turning
+    thetaMin = np.arctan(hc / d_look_stop)
+    thetaMax = np.arctan(hc / d_offset)
+    VFOV = 2 * thetaSlope + np.minimum(thetaMin, thetaMax)
+
     fig1 = go.Figure()
-    fig1.add_trace(go.Scatter(x=v_kph, y=HFOV * 1e3, mode='lines', name='HAOV [miliradians]', line=dict(color='lime', width=3)))
-    fig1.add_trace(go.Scatter(x=v_kph, y=VFOV * 1e3, mode='lines', name='VAOV [miliradians]', line=dict(color='red', width=3)))
+    fig1.add_trace(go.Scatter(x=v_kph, y=np.degrees(HFOV), mode='lines', name='HAOV [degrees]',
+                              line=dict(color=style['line_color']['lime'], width=3)))
+    fig1.add_trace(go.Scatter(x=v_kph, y=np.degrees(VFOV), mode='lines', name='VAOV [degrees]',
+                              line=dict(color=style['line_color']['red'], width=3)))
     
     # Cotas de las velocidades a 30 km/h y 60 km/h
     v_30_kph = 30
     v_60_kph = 60
 
-    # Índice de los valres más cercanos a 30 km/h y 60 km/h
+    # Índice de los valores más cercanos a 30 km/h y 60 km/h
     index_30 = (np.abs(v_kph - v_30_kph)).argmin()
     index_60 = (np.abs(v_kph - v_60_kph)).argmin()
 
-    vfov_30 = VFOV[index_30] * 1e3
-    vfov_60 = VFOV[index_60] * 1e3
-    
+    vfov_30 = np.degrees(VFOV[index_30])
+    vfov_60 = np.degrees(VFOV[index_60])
+
     fig1.add_trace(go.Scatter(
         x=[v_kph[index_30]], y=[vfov_30], mode='markers+text', name='VFOV at 30 km/h',
-        text=[f'30 km/h: {vfov_30:.2f} miliradians'],
+        text=[f'30 km/h: {vfov_30:.2f} degrees'],
         textposition='top right',
         marker=dict(color='yellow', size=10),
         showlegend=True
@@ -117,7 +169,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
     fig1.add_trace(go.Scatter(
         x=[v_kph[index_60]], y=[vfov_60], mode='markers+text', name='VFOV at 60 km/h',
-        text=[f'60 km/h: {vfov_60:.2f} miliradians'],
+        text=[f'60 km/h: {vfov_60:.2f} degrees'],
         textposition='top right',
         marker=dict(color='cyan', size=10),
         showlegend=True
@@ -129,7 +181,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         x0=v_kph[index_30],
         y0=0,
         x1=v_kph[index_30],
-        y1=max(VFOV) * 1e3,
+        y1=max(np.degrees(VFOV)),
         line=dict(color='yellow', width=2, dash='dash')
     )
 
@@ -138,28 +190,22 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         x0=v_kph[index_60],
         y0=0,
         x1=v_kph[index_60],
-        y1=max(VFOV) * 1e3,
+        y1=max(np.degrees(VFOV)),
         line=dict(color='cyan', width=2, dash='dash')
     )
 
     fig1.update_layout(
         title='Angle of View (AOV) VS Vehicle Speed',
         xaxis_title='Vehicle speed [km/h]',
-        yaxis_title='Angle of View (AOV) [miliradians]',
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='white'),
-        autosize=True,
-        margin=dict(t=40, b=40, l=40, r=40)
+        yaxis_title='Angle of View (AOV) [degrees]',
+        paper_bgcolor=style['paper_bgcolor'],
+        plot_bgcolor=style['plot_bgcolor'],
+        font=style['font']
     )
 
-    # Gráfico interactivo 2: IFOV para diferentes obstaculos positivos ------------------------------------------------------------
+    # Gráfico 2: IFOV para obstáculos positivos ------------------------------------------------------------
     looakheadDistance = np.arange(1, 1001)
-
-    if object_height is not None:
-        hp_values = np.array([object_height])  # Usar la altura del objeto si se proporciona
-    else:
-        hp_values = np.arange(0.1, 1.1, 0.1)  # Usar valores por defecto si no se proporciona la altura del objeto
+    hp_values = np.array([object_height]) if object_height else np.arange(0.1, 1.1, 0.1)
     IFOVp = np.zeros((len(hp_values), len(looakheadDistance)))
 
     for i, hp in enumerate(hp_values):
@@ -167,14 +213,17 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
     fig2 = go.Figure()
     for i, hp in enumerate(hp_values):
-        fig2.add_trace(go.Scatter(x=looakheadDistance, y=IFOVp[i, :] * 1e3, mode='lines', name=f'Object Height: {hp:.1f} meters', line=dict(width=3)))
+        fig2.add_trace(go.Scatter(x=looakheadDistance, y=IFOVp[i, :] * 1e3,
+                                  mode='lines', name=f'Object Height: {hp:.1f} meters',
+                                  line=dict(width=3)))
 
     # Leyenda de la altura del objeto
     if object_height is not None:
         fig2.add_trace(go.Scatter(
-            x=[1], y=[2], mode='text', name='Object Height',
+            x=[looakheadDistance[-1]], y=[IFOVp[-1, -1] * 1e3], mode='text', name='Object Height',
             text=[f'Object Height: {object_height:.2f} meters'],
-            textposition='top right',
+            textposition='bottom right',
+            textfont=dict(size=10),
             showlegend=False
         ))
 
@@ -202,25 +251,27 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     fig2.update_layout(
         title='Positive Obstacle IFOV',
         xaxis_title='Sensor distance to the scene [m]',
-        yaxis_title='IFOV [milliradians]',
+        yaxis_title='IFOV [Degrees]',
         xaxis_type='log',
         yaxis_type='log',
         xaxis=dict(dtick=1, title=dict(standoff=20)),
         yaxis=dict(dtick=1, title=dict(standoff=20), range=[-1, 3.5]),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='white')
+        paper_bgcolor=style['paper_bgcolor'],
+        plot_bgcolor=style['plot_bgcolor'],
+        font=style['font']
     )
 
-    # Gráfico interactivo 3: Lookahead Distance for Stopping -----------------------------------------------------------------------------
+    # Gráfico 3: Distancia de frenado ---------------------------------------------------------------------------------
     fig3 = go.Figure()
-    fig3.add_trace(go.Scatter(x=v_kph, y=d_look_stop, mode='lines', name='Stopping Distance [m]', line=dict(color='aqua', width=3)))
-
+    fig3.add_trace(go.Scatter(x=v_kph, y=d_look_stop, mode='lines', name='Stopping Distance [m]',
+                              line=dict(color=style['line_color']['aqua'], width=3)))
+    
     # Añadir cotas para las velocidades a 30 km/h y 60 km/h
     fig3.add_trace(go.Scatter(
         x=[v_kph[index_30]], y=[d_look_stop[index_30]], mode='markers+text', name='Stopping Distance at 30 km/h',
         text=[f'30 km/h: {d_look_stop[index_30]:.2f} m'],
         textposition='top right',
+        textfont=dict(size=10),
         marker=dict(color='yellow', size=10),
         showlegend=True
     ))
@@ -229,6 +280,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         x=[v_kph[index_60]], y=[d_look_stop[index_60]], mode='markers+text', name='Stopping Distance at 60 km/h',
         text=[f'60 km/h: {d_look_stop[index_60]:.2f} m'],
         textposition='top right',
+        textfont=dict(size=10),
         marker=dict(color='cyan', size=10),
         showlegend=True
     ))
@@ -264,6 +316,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         name='Selected Object',
         text=[f'Object Distance: {object_distance:.2f} m'],
         textposition='top right',
+        textfont=dict(size=10),
         marker=dict(color='magenta', size=15),
         showlegend=True
         ))
@@ -282,22 +335,24 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         title='Lookahead Distance for Stopping',
         xaxis_title='Vehicle speed [km/h]',
         yaxis_title='Lookahead distance [m]',
-        yaxis=dict(range=[0, 200]),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='white')
+        yaxis=dict(range=[0, 150]),
+        paper_bgcolor=style['paper_bgcolor'],
+        plot_bgcolor=style['plot_bgcolor'],
+        font=style['font']
     )
 
-    # Gráfico interactivo 4: Lookahead Distance for Swerving -----------------------------------------------------------------------------
+    # Gráfico 4: Distancia de esquiva ----------------------------------------------------------------------------
     fig4 = go.Figure()
-    fig4.add_trace(go.Scatter(x=v_kph, y=d_look_swerve, mode='lines', name='Swerving Distance [m]', line=dict(color='orange', width=3)))
-
+    fig4.add_trace(go.Scatter(x=v_kph, y=d_look_swerve, mode='lines', name='Swerving Distance [m]',
+                              line=dict(color=style['line_color']['orange'], width=3)))
+    
     # Añadir cotas para las velocidades a 30 km/h y 60 km/h
     fig4.add_trace(go.Scatter(
         x=[v_kph[index_30]], y=[d_look_swerve[index_30]], mode='markers+text', name='Swerving Distance at 30 km/h',
         text=[f'30 km/h: {d_look_swerve[index_30]:.2f} m'],
         textposition='top right',
         marker=dict(color='yellow', size=10),
+        textfont=dict(size=10),
         showlegend=True
     ))
 
@@ -306,6 +361,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         text=[f'60 km/h: {d_look_swerve[index_60]:.2f} m'],
         textposition='top right',
         marker=dict(color='cyan', size=10),
+        textfont=dict(size=10),
         showlegend=True
     ))
 
@@ -316,7 +372,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         y0=d_look_swerve[index_30],
         x1=max(v_kph),
         y1=d_look_swerve[index_30],
-        line=dict(color='yellow', width=2, dash='dash')
+        line=dict(color='yellow', width=1, dash='dash')
     )
 
     fig4.add_shape(
@@ -325,10 +381,10 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         y0=d_look_swerve[index_60],
         x1=max(v_kph),
         y1=d_look_swerve[index_60],
-        line=dict(color='cyan', width=2, dash='dash')
+        line=dict(color='cyan', width=1, dash='dash')
     )
 
-# Línea delimitadora horizontal para la distancia del objeto seleccionado (nueva cota)
+    # Línea delimitadora horizontal para la distancia del objeto seleccionado (nueva cota)
     if object_distance is not None:
 
         # Indice del valor más cercano a la distancia del objeto para la cota
@@ -341,6 +397,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         text=[f'Object Distance: {object_distance:.2f} m'],
         textposition='top right',
         marker=dict(color='magenta', size=15),
+        textfont=dict(size=10),
         showlegend=True
         ))
 
@@ -358,11 +415,10 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         title="Lookahead Distance for Swerving",
         xaxis_title="Vehicle speed [km/h]",
         yaxis_title="Lookahead distance [m]",
-        yaxis=dict(range=[0, 200]),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='white')
+        yaxis=dict(range=[0, 150]),
+        paper_bgcolor=style['paper_bgcolor'],
+        plot_bgcolor=style['plot_bgcolor'],
+        font=style['font']
     )
 
-    # Retornar las gráficas interactivas
     return fig1, fig2, fig3, fig4

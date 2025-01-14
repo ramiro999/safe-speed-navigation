@@ -49,6 +49,184 @@ stereo_output_image = None
 image_path_left_original = None
 objects_info = []  # Almacenar los objetos detectados en la imagen
 
+
+gr.HTML("""
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Arial', sans-serif;
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    /* Estilo por defecto - oscuro */
+    body {
+        background-color: #2c2f33;
+        color: #ffffff;
+    }
+
+    /* Estilo para modo claro */
+    @media (prefers-color-scheme: light) {
+        body {
+            background-color: #ffffff;
+            color: #000000;
+        }
+
+        .card {
+            background-color: #f8f9fa;
+            color: #000000;
+        }
+
+        .card h3 {
+            color: #333333;
+        }
+
+        .card p {
+            color: #555555;
+        }
+    }
+
+    /* Estilo general para texto */
+    h1, h2, h3, h4, h5, h6, p, label, .description-text {
+        transition: color 0.3s ease;
+    }
+
+    @media (prefers-color-scheme: light) {
+        h1, h2, h3, h4, h5, h6, p, label, .description-text {
+            color: #000000;
+        }
+    }
+
+    /* Estilo de botones */
+    button {
+        background-color: #1abc9c;
+        color: #ffffff;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    button:hover {
+        background-color: #16a085;
+    }
+
+    @media (prefers-color-scheme: light) {
+        button {
+            background-color: #007bff;
+            color: #ffffff;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+    }
+
+    /* Estilo de las tarjetas */
+    .card {
+        background-color: #2c2f33;
+        color: #ffffff;
+        border-radius: 10px;
+        padding: 15px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        text-align: left;
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    @media (prefers-color-scheme: light) {
+        .card {
+            background-color: #f8f9fa;
+            color: #000000;
+        }
+    }
+
+    /* Estilo de enlaces */
+    a {
+        color: #1abc9c;
+        transition: color 0.3s ease;
+    }
+
+    a:hover {
+        color: #16a085;
+    }
+
+    @media (prefers-color-scheme: light) {
+        a {
+            color: #007bff;
+        }
+
+        a:hover {
+            color: #0056b3;
+        }
+    }
+
+    /* Estilo de tablas */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        font-size: 18px;
+        text-align: left;
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    th, td {
+        padding: 12px;
+        border: 1px solid #ddd;
+    }
+
+    th {
+        background-color: #4CAF50;
+        color: white;
+    }
+
+    @media (prefers-color-scheme: light) {
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+
+        td {
+            color: #000000;
+        }
+    }
+
+    /* Estilo de inputs */
+    input, select, textarea {
+        background-color: #3a3f44;
+        color: #ffffff;
+        border: 1px solid #555555;
+        padding: 10px;
+        border-radius: 5px;
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    @media (prefers-color-scheme: light) {
+        input, select, textarea {
+            background-color: #ffffff;
+            color: #000000;
+            border: 1px solid #cccccc;
+        }
+    }
+
+    /* Estilo para gráficos */
+    .plotly-graph {
+        transition: background-color 0.3s ease;
+    }
+
+    @media (prefers-color-scheme: light) {
+        .plotly-graph {
+            background-color: #ffffff;
+        }
+    }
+</style>
+""")
+
+
 def save_temp_image(image_array):
     """
     Guarda una imagen numpy.ndarray en un archivo temporal y devuelve la ruta del archivo.
@@ -73,9 +251,9 @@ def stereo_inference(image_path_left=None, image_path_right=None):
 
     global stereo_output_image, image_path_left_original # Variables globales para almacenar la imagen de salida y la imagen original
     image_path_left_original = image_path_left 
-    dataset_name = "custom_dataset" 
+    dataset_name = "kitti" 
     output = "./resultados_kitti"
-    resume_path = "./stereo/NMRF/pretrained/sceneflow.pth" # Ruta del modelo pre-entrenado con KITTI 
+    resume_path = "./stereo/NMRF/pretrained/sceneflow.pth" # Ruta del modelo pre-entrenado con sceneflow.pth
 
     # Crear una lista con las imágenes de entrada proporcionadas por el usuario
     image_list = [(image_path_left, image_path_right)]
@@ -123,7 +301,7 @@ def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725)
 
     # Crear figura con barra de colores
     fig, ax = plt.subplots(figsize=(10, 5), dpi=300, frameon=False)
-    im = ax.imshow(depth_map_normalized, cmap='inferno', vmin=0, vmax=255)
+    im = ax.imshow(depth_map_normalized, cmap='inferno_r', vmin=0, vmax=255)
     
     # Agregar colorbar con rango 0-255
     cbar = fig.colorbar(im, ax=ax, orientation='horizontal', label='Depth')
@@ -133,6 +311,13 @@ def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725)
     plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='white')  # Cambiar el color de las etiquetas a blanco
     cbar.set_ticks([0, 64, 128, 192, 255])  # Valores clave en el rango
     cbar.ax.set_xticklabels(['0', '64', '128', '192', '255'])  # Escala en el rango 0-255
+
+    # Cambiar el color de las etiquetas a negro si el tema del PC es claro
+    if plt.rcParams['axes.facecolor'] == 'white':
+        cbar.ax.xaxis.label.set_color('black')
+        cbar.ax.tick_params(color='black')  
+        cbar.ax.xaxis.set_tick_params(color='black')
+        plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='black')  # Cambiar el color de las etiquetas a negro
 
     
     ax.axis('off')
@@ -190,7 +375,6 @@ def only_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
 
     return depth_map_colored
 
-
 # Función para detección de objetos y calcular la distancia usando la disparidad
 def object_detection_with_disparity(selected_model_name):
     global stereo_output_image, image_path_left_original, objects_info
@@ -202,6 +386,14 @@ def object_detection_with_disparity(selected_model_name):
     depth_map_colored = only_depth_map(stereo_output_image)
     depth = cv2.cvtColor(depth_map_colored, cv2.COLOR_BGR2GRAY)
     image = cv2.imread(image_path_left_original, cv2.IMREAD_COLOR)
+
+    # Seleccionar las clases según el modelo
+    if selected_model_name == "DETR":
+        class_names = COCO_INSTANCE_CATEGORY_NAMES
+    elif selected_model_name == "YOLOv11":
+        class_names = yolov11_model.model.names
+    else:
+        return None, gr.Warning("Modelo no válido seleccionado.")
 
     bboxes, labels = [], []  # Inicializar variables comunes
 
@@ -225,6 +417,7 @@ def object_detection_with_disparity(selected_model_name):
 
     # Procesar información de objetos detectados
     objects_info = []
+
     cards_html = """
     <style>
         .grid-container {
@@ -249,6 +442,7 @@ def object_detection_with_disparity(selected_model_name):
             font-size: 18px;
             display: flex;
             align-items: center;
+            color: inherit;
         }
         .card h3 img {
             width: 24px;
@@ -257,6 +451,22 @@ def object_detection_with_disparity(selected_model_name):
         .card p {
             font-size: 16px;
             margin: 5px 0;
+            color: inherit;
+        }
+
+        @media (prefers-color-scheme: light) {
+        .card {
+            background-color: #f8f9fa;
+            color: #000000;
+        }
+
+        .card h3 {
+            color: #333333;
+        }
+
+        .card p {
+            color: #555555;
+            }
         }
     </style>
     <div class="grid-container">
@@ -264,7 +474,7 @@ def object_detection_with_disparity(selected_model_name):
 
     for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):
         if selected_model_name == "DETR":
-            if label < 0 or label >= len(COCO_INSTANCE_CATEGORY_NAMES):
+            if label < 0 or label >= len(class_names):
                 print(f"Invalid label detected: {label}")
                 continue
             cx, cy, w, h = bbox
@@ -288,11 +498,12 @@ def object_detection_with_disparity(selected_model_name):
         # Agregar información del objeto detectado
         objects_info.append({
             'id': idx,
-            'class': COCO_INSTANCE_CATEGORY_NAMES[label],
+            'class': class_names[label],
             'height': height_bb,
             'bbox': [x0, y0, x1, y1],
             'distance': median_distance
         })
+        
 
         # Diccionario para las imagenes de las clases seleccionadas
         CLASS_IMAGES = {
@@ -306,16 +517,17 @@ def object_detection_with_disparity(selected_model_name):
 
         def get_class_icon(class_name):
             return CLASS_IMAGES.get(class_name, 'https://img.icons8.com/color/48/000000/car--v1.png')
+       
 
 
         # Tarjeta para el objeto detectado
         cards_html += f"""
         <div class="card">
             <h3>
-                <img src={get_class_icon(COCO_INSTANCE_CATEGORY_NAMES[label])} alt="Object Icon">
+                <img src={get_class_icon(class_names[label])} alt="Object Icon">
                 Object ID: {idx}
             </h3>
-            <p><strong>Class:</strong> {COCO_INSTANCE_CATEGORY_NAMES[label]}</p>
+            <p><strong>Class:</strong> {class_names[label]}</p>
             <p><strong>Height:</strong> {height_bb} pixels</p>
             <p><strong>Coordinates:</strong> ({x0}, {y0}) to ({x1}, {y1})</p>
             <p><strong>Distance:</strong> {median_distance:.2f} meters</p>
@@ -324,6 +536,14 @@ def object_detection_with_disparity(selected_model_name):
 
     # Finalizar el contenedor de la grilla
     cards_html += "</div>"
+
+
+    # Ordenar los objetos por distancia
+    objects_info.sort(key=lambda x: x['distance'])
+    
+    # Reasignar los objetos ordenados
+    for new_idx, obj in enumerate(objects_info, start=1):
+        obj['id'] = new_idx 
 
     # Visualizar y guardar resultados en Plotly
     fig = go.Figure()
@@ -341,7 +561,8 @@ def object_detection_with_disparity(selected_model_name):
         fig.add_shape(
             type="rect",
             x0=x0, y0=y0, x1=x1, y1=y1,
-            line=dict(color=color, width=2)
+            line=dict(color=color, width=2),
+            fillcolor=f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)"  # Color con transparencia
         )
 
         # Añadir el texto con la distancia, ID y clase sobre la caja
@@ -349,7 +570,11 @@ def object_detection_with_disparity(selected_model_name):
             x=(x0 + x1) / 2, y=y0 - 10,
             text=f"ID: {obj['id']} Class: {obj['class']} Dist: {obj['distance']:.2f} m",
             showarrow=False,
-            font=dict(color=color, size=12)
+            font=dict(color=color, size=12),
+            bgcolor="rgba(0, 0, 0, 0.5)",
+            bordercolor=color,
+            borderwidth=1,
+            borderpad=2
         )
 
     fig.update_layout(
@@ -359,6 +584,9 @@ def object_detection_with_disparity(selected_model_name):
         autosize=True,
         margin=dict(t=0, b=40, l=0, r=0),
     )
+
+    # Guardar el gráfico como imagen
+    fig.write_image("./outputs/object_detection_results_with_distances.png")
 
     return fig, cards_html
 
@@ -513,12 +741,56 @@ with gr.Blocks(theme=seafoam) as demo:
     """)
 
     gr.HTML("""
-    <div class="title-text" style="text-align: center; display: flex; justify-content: center; align-items: center;">
-        <img src="https://i.ibb.co/v10hH1k/icons8-autonomous-vehicles-96.png" alt="Icon" style="width: 50px; vertical-align: middle; margin-right: 10px;">
-        <span> Estimation of safe navigation speed for autonomous vehicles </span>
-        <img src="https://i.ibb.co/v10hH1k/icons8-autonomous-vehicles-96.png" alt="Icon" style="width: 50px; vertical-align: middle; margin-left: 10px;">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500&display=swap');
+
+        .title-text {
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px; /* Espacio entre íconos y texto */
+            flex-wrap: nowrap; /* No permite que se rompa en varias líneas */
+        }
+
+        .title-text span {
+            font-family: 'Poppins', sans-serif; /* Cambia la fuente a Poppins */
+            font-size: 2.5vw; /* Escala adaptativa según el ancho de la pantalla */
+            font-weight: 500; /* Peso de la fuente */
+            color: #333; /* Cambia el color del texto si lo necesitas */
+            text-align: center;
+        }
+
+        .title-text img {
+            width: 40px;
+            height: auto;
+        }
+
+        @media (max-width: 768px) {
+            .title-text span {
+                font-size: 2.5vw; /* Reduce la fuente en pantallas medianas */
+            }
+            .title-text img {
+                width: 35px; /* Ajusta el tamaño del ícono */
+            }
+        }
+
+        @media (max-width: 480px) {
+            .title-text span {
+                font-size: 3.5vw; /* Reduce aún más la fuente en móviles */
+            }
+            .title-text img {
+                width: 30px; /* Ajusta el tamaño del ícono */
+            }
+        }
+    </style>
+    <div class="title-text">
+        <img src="https://i.ibb.co/VLwzcq2/logo.png" alt="Icon">
+        <span>Estimation of safe navigation speed for autonomous vehicles</span>
+        <img src="https://i.ibb.co/VLwzcq2/logo.png" alt="Icon">
     </div>
     """)
+
 
     with gr.Tab("Stereo Inference"):
         gr.Markdown("## Stereo Inference", elem_id="stereo-inference-title")
@@ -549,6 +821,17 @@ with gr.Blocks(theme=seafoam) as demo:
             #inference-button:hover {
                 background-color: #688581;
             }
+                
+            @media (prefers-color-scheme: light) {
+                #inference-button {
+                    background-color: #e0e0e0;
+                    color: #000000;
+                }
+
+                #inference-button:hover {
+                    background-color: #bdbdbd;
+                }
+            }    
 
            #depth-button {
                 background-color: #2b3b46;
@@ -564,9 +847,18 @@ with gr.Blocks(theme=seafoam) as demo:
             }
             #depth-button:hover {
                 background-color: #688581;
+            }
+            @media (prefers-color-scheme: light) {
+                #depth-button {
+                    background-color: #e0e0e0;
+                    color: #000000;
+                }
+
+                #depth-button:hover {
+                    background-color: #bdbdbd; 
+                }
             }    
                     
-
         </style>
         <p style="text-align: center;">Upload a pair of stereo images or choose the Example Stereo Images below, to perform stereo inference and generate the disparity map.</p>
         """)
@@ -620,11 +912,32 @@ with gr.Blocks(theme=seafoam) as demo:
             }
         </style>
                 
-        <p style="text-align: center;">Perform object detection on the original left image using the detected objects from the disparity map.</p>
+        <p style="text-align: center;">Perform object detection on the original left image using the detected objects from the disparity map. You can select the detection model</p>
         """)
-        gr.Markdown("# Select Detection Model")
-        model_selector = gr.Radio(["DETR", "YOLOv11"], label="Detection Model", value="DETR")
+        model_selector = gr.Radio(["DETR", "YOLOv11"], label="Detection Model", value="DETR", elem_id="model-selector")
 
+        gr.HTML("""
+        <style>
+            #model-selector {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto;
+            }
+            #model-selector > label {
+                text-align: center;
+                font-size: 16px;
+                font-weight: bold;
+                margin-bottom: 10px;
+            }
+            #model-selector .gr-button-group {
+                display: flex;
+                justify-content: center;
+                gap: 10px; /* Espaciado entre botones */
+            }
+        </style>
+        """)
 
         run_button = gr.Button("Run Detection", elem_id="inference-button")
         detect_output_image = gr.Plot(label="Object Detection", visible=True)
@@ -666,9 +979,10 @@ with gr.Blocks(theme=seafoam) as demo:
                     outputs=[turning_car, cog, wheelbase]
                 )
         
+        load_button = gr.Button("Load Objects", elem_id="inference-button")
+
         # Radio para seleccionar los objetos detectados
         selected_object_ids = gr.Radio(label="Select Object by ID", choices=[], interactive=True)
-        load_button = gr.Button("Load Object Heights", elem_id="inference-button")
         
         run_button = gr.Button("Calculate Distance", elem_id="inference-button")
         
