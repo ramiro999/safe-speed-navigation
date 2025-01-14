@@ -3,3 +3,16 @@ __pycache__/
 
 resultados_kitti/
 stereo_images/
+
+stereo/NMRF/.idea/
+stereo/NMRF/.vscode/
+stereo/NMRF/__pycache__/
+stereo/NMRF/*.py[cod]
+stereo/NMRF/*$py.class
+stereo/NMRF/*.so
+stereo/NMRF/checkpoints/
+stereo/NMRF/datasets/
+stereo/NMRF/build/
+stereo/NMRF/dist/
+stereo/NMRF/*.egg-info/
+stereo/NMRF/resultados_kitti/
