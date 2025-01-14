@@ -10,7 +10,7 @@ This project addresses the estimation of safe navigation speed for autonomous ve
 
 ## 📝 How to Build
 
-To build the packages, follow these steps:
+The code is developed on Ubuntu 22.04 using Python 3.11 and torch 2.5.1. To build the packages, follow these steps:
 
 ```shell
 # Open a terminal (Command Prompt or PowerShell for Windows, Terminal for macOS or Linux)
@@ -23,6 +23,17 @@ git clone https://github.com/ramiro999/safe-speed-navigation.git
 
 # Navigate to the project directory
 cd safe-speed-navigation
+
+# Set up a Python environment
+python3.11 -m venv venv
+source venv/bin/activate
+
+# Build MultiScaleDeformableAttention:
+# Navigate to the stereo/NMRF/ops directory and run the following command:
+
+cd stereo/NMRF/ops
+sh make.sh
+cd ../../..
 
 # Restore dependencies
 pip install -r requirements.txt
