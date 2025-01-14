@@ -24,8 +24,10 @@ from yolov11.model_loader_yolo import load_yolov11_model
 from yolov11.image_processing_yolo import draw_yolo_results
 
 # Añadir directorios al path
-sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF')
-sys.path.append('/home/ramiro-avila/simulation-gradio/stereo/NMRF/ops/setup/MultiScaleDeformableAttention')
+sys.path.extend([
+    os.path.join(os.path.dirname(__file__), 'stereo', 'NMRF'),
+    os.path.join(os.path.dirname(__file__), 'stereo', 'NMRF', 'ops', 'setup', 'MultiScaleDeformableAttention')
+])
 
 from stereo.NMRF.inference import run_inference
 from stereo.NMRF.nmrf.utils.frame_utils import readDepthVKITTI
