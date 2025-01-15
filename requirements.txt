@@ -58,7 +58,6 @@ mkl-random
 mkl-service
 ml-dtypes
 mpld3
-MultiScaleDeformableAttention
 numpy
 oauthlib
 omegaconf
