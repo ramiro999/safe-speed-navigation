@@ -1,4 +1,4 @@
-myenv/
+venv/
 __pycache__/
 
 resultados_kitti/
@@ -11,7 +11,6 @@ stereo/NMRF/*.py[cod]
 stereo/NMRF/*$py.class
 stereo/NMRF/*.so
 stereo/NMRF/checkpoints/
-stereo/NMRF/datasets/
 stereo/NMRF/build/
 stereo/NMRF/dist/
 stereo/NMRF/*.egg-info/

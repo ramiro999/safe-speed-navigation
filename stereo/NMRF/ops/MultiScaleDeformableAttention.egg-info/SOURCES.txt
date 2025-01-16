@@ -1,7 +1,5 @@
 README.md
 setup.py
-/home/ramiro-avila/NMRF/NMRF/ops/src/vision.cpp
-/home/ramiro-avila/NMRF/NMRF/ops/src/cpu/ms_deform_attn_cpu.cpp
 /home/ramiro-avila/safe-speed-navigation/stereo/NMRF/ops/src/vision.cpp
 /home/ramiro-avila/safe-speed-navigation/stereo/NMRF/ops/src/cpu/ms_deform_attn_cpu.cpp
 MultiScaleDeformableAttention.egg-info/PKG-INFO

@@ -3,7 +3,7 @@ import numpy as np
 import plotly.graph_objects as go
 import torch
 from detr.image_processing import preprocess_image, plot_detr_results
-from detr.model_loader import load_detr_model
+from detr.model_detr import load_detr_model
 
 """
 Script para calcular las distancias de frenado y esquiva para un vehículo autónomo en función de los parámetros de entrada.
@@ -91,8 +91,16 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     d_offset = B  # Distancia de desplazamiento debida a la longitud del coche.
     w = wheelbase  # Ancho del vehículo
     turningCar = turning_angle  # Ángulo de giro del vehículo
-    object_height = object_height * (0.1) # Convertir la altura del objeto a metros, tipicamente el GSD de KITTI es 0.1. Esto es lo unico que me genera inquietud
-    hp = object_height  # Altura del obstáculo positivo
+
+    object_distance = object_distance # Distancia del objeto al sistema óptico en metros
+    object_height = object_height # Altura del objeto en metros
+    
+    pixSize = 4.65e-3  # Tamaño del sensor height en milimetros
+    focalLength = 3.371290455  # Longitud focal en milimetros
+    imageHeight = 375  # Altura de la imagen en pixeles
+    gsd = (object_distance * pixSize) / (focalLength * imageHeight)  # Ground Sampling Distance (GSD) en centrimetros por pixel
+
+    hp = object_height * gsd  # Altura del ob   jeto en centrimetros
 
     # Rangos de velocidad
     v_mph = np.arange(1, 151)  # Velocidades de 1 a 150 mph
@@ -204,58 +212,61 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     )
 
     # Gráfico 2: IFOV para obstáculos positivos ------------------------------------------------------------
-    looakheadDistance = np.arange(1, 1001)
-    hp_values = np.array([object_height]) if object_height else np.arange(0.1, 1.1, 0.1)
-    IFOVp = np.zeros((len(hp_values), len(looakheadDistance)))
+    looakheadDistance = np.arange(1, 1001)  # Lookahead distance in meters          
+    IFOVp = np.zeros(len(looakheadDistance))  # Solo un conjunto de valores, porque hp es escalar
 
-    for i, hp in enumerate(hp_values):
-        IFOVp[i, :] = np.arctan(hc / looakheadDistance) - np.arctan((hc - hp) / looakheadDistance)
+    # Calcular IFOV para la altura del objeto
+    for i, distance in enumerate(looakheadDistance):
+        IFOVp[i] = np.arctan(hc / distance) - np.arctan((hc - hp) / distance)
 
     fig2 = go.Figure()
-    for i, hp in enumerate(hp_values):
-        fig2.add_trace(go.Scatter(x=looakheadDistance, y=IFOVp[i, :] * 1e3,
-                                  mode='lines', name=f'Object Height: {hp:.1f} meters',
-                                  line=dict(width=3)))
-
-    # Leyenda de la altura del objeto
-    if object_height is not None:
-        fig2.add_trace(go.Scatter(
-            x=[looakheadDistance[-1]], y=[IFOVp[-1, -1] * 1e3], mode='text', name='Object Height',
-            text=[f'Object Height: {object_height:.2f} meters'],
-            textposition='bottom right',
-            textfont=dict(size=10),
-            showlegend=False
-        ))
+    fig2.add_trace(go.Scatter(
+        x=looakheadDistance,
+        y=IFOVp * 1e3,  # Convertir a miliradianes
+        mode='lines',
+        name=f'Object Size: {hp:.5f} cm',
+        line=dict(width=3)
+    ))
 
     # Cota para el objeto seleccionado
     if object_distance is not None:
-        selected_ifov = np.arctan(hc / object_distance) - np.arctan((hc - object_height) / object_distance)
+        selected_ifov = np.arctan(hc / object_distance) - np.arctan((hc - hp) / object_distance)
         fig2.add_trace(go.Scatter(
-            x=[object_distance], y=[selected_ifov * 1e3], mode='markers+text', name='Selected Object',
+            x=[object_distance],
+            y=[selected_ifov * 1e3],  # Convertir a miliradianes
+            mode='markers+text',
+            name='Selected Object',
             text=[f'IFOV: {selected_ifov * 1e3:.2f} miliradians\nDistance: {object_distance:.2f} meters'],
             textposition='top right',
             marker=dict(color='yellow', size=15),
             showlegend=True
         ))
 
-    # Linea delimitadora
-    fig2.add_shape(
-        type='line',
-        x0=object_distance,
-        y0=1,
-        x1=object_distance,
-        y1=max(IFOVp.flatten()) * 1e3,
-        line=dict(color='yellow', width=2, dash='dash')
-    )
+        # Línea delimitadora para la distancia del objeto seleccionado
+        fig2.add_shape(
+            type='line',
+            x0=object_distance,
+            y0=0.1,  # Mínimo valor de IFOV en miliradianes
+            x1=object_distance,
+            y1=max(IFOVp) * 1e3,
+            line=dict(color='yellow', width=2, dash='dash')
+        )
 
     fig2.update_layout(
         title='Positive Obstacle IFOV',
         xaxis_title='Sensor distance to the scene [m]',
-        yaxis_title='IFOV [Degrees]',
-        xaxis_type='log',
-        yaxis_type='log',
-        xaxis=dict(dtick=1, title=dict(standoff=20)),
-        yaxis=dict(dtick=1, title=dict(standoff=20), range=[-1, 3.5]),
+        yaxis_title='IFOV [milliradians]',
+        xaxis_type='log',  # Escala logarítmica en x
+        yaxis_type='log',  # Escala logarítmica en y
+        xaxis=dict(
+            title=dict(standoff=20),
+            dtick=1
+        ),
+        yaxis=dict(
+            type='log',
+            range=[-3, 3],  # Ajustar el rango del eje Y (10^-3 a 10^3)
+            title=dict(standoff=20)
+        ),
         paper_bgcolor=style['paper_bgcolor'],
         plot_bgcolor=style['plot_bgcolor'],
         font=style['font']

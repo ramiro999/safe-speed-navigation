@@ -17,10 +17,10 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
 # Importar módulos personalizados
-from autonomous_navigation_calculator import calculate_lookahead_distance
+from safety_calculator import calculate_lookahead_distance
 from detr.image_processing import preprocess_image, plot_detr_results_with_distance
-from detr.model_loader import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
-from yolov11.model_loader_yolo import load_yolov11_model
+from detr.model_detr import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
+from yolov11.model_yolo import load_yolov11_model
 from yolov11.image_processing_yolo import draw_yolo_results
 
 # Añadir directorios al path
@@ -29,7 +29,7 @@ sys.path.extend([
     os.path.join(os.path.dirname(__file__), 'stereo', 'NMRF', 'ops', 'setup', 'MultiScaleDeformableAttention')
 ])
 
-from stereo.NMRF.inference import run_inference
+from stereo.NMRF.disparity_inference import run_inference
 from stereo.NMRF.nmrf.utils.frame_utils import readDepthVKITTI
 
 """
@@ -393,7 +393,7 @@ def object_detection_with_disparity(selected_model_name):
     if selected_model_name == "DETR":
         class_names = COCO_INSTANCE_CATEGORY_NAMES
     elif selected_model_name == "YOLOv11":
-        class_names = yolov11_model.model.names
+        class_names = list(yolov11_model.model.names.values())
     else:
         return None, gr.Warning("Modelo no válido seleccionado.")
 
@@ -420,6 +420,44 @@ def object_detection_with_disparity(selected_model_name):
     # Procesar información de objetos detectados
     objects_info = []
 
+    for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):
+        if selected_model_name == "DETR":
+            if label < 0 or label >= len(class_names):
+                print(f"Invalid label detected: {label}")
+                continue
+            cx, cy, w, h = bbox
+            x0, y0 = int((cx - w / 2) * image.shape[1]), int((cy - h / 2) * image.shape[0])
+            x1, y1 = int((cx + w / 2) * image.shape[1]), int((cy + h / 2) * image.shape[0])
+        elif selected_model_name == "YOLOv11":
+            x0, y0, x1, y1 = map(int, bbox)
+
+        height_bb = abs(y1 - y0)
+
+        # Recortar región del mapa de profundidad correspondiente al bounding box
+        bbox_depth = depth[y0:y1, x0:x1]
+        bbox_valid = bbox_depth[bbox_depth > 0]
+
+        # Calcular distancia media en región válida
+        if len(bbox_valid) > 0:
+            median_distance = np.median(bbox_valid)  # Limitar rango de 0-100 metros para valores 0-255
+        else:
+            median_distance = float('inf')
+
+        # Agregar información del objeto detectado (sin ordenar todavía)
+        objects_info.append({
+            'id': idx,
+            'class': class_names[label],
+            'height': height_bb,
+            'bbox': [x0, y0, x1, y1],
+            'distance': median_distance
+        })
+
+    # Ordenar los objetos por distancia y reasignar IDs
+    objects_info.sort(key=lambda x: x['distance'])
+    for new_idx, obj in enumerate(objects_info, start=1):
+        obj['id'] = new_idx
+
+    # Construir tarjetas HTML
     cards_html = """
     <style>
         .grid-container {
@@ -461,11 +499,9 @@ def object_detection_with_disparity(selected_model_name):
             background-color: #f8f9fa;
             color: #000000;
         }
-
         .card h3 {
             color: #333333;
         }
-
         .card p {
             color: #555555;
             }
@@ -474,92 +510,43 @@ def object_detection_with_disparity(selected_model_name):
     <div class="grid-container">
     """
 
-    for idx, (bbox, label) in enumerate(zip(bboxes, labels), start=1):
-        if selected_model_name == "DETR":
-            if label < 0 or label >= len(class_names):
-                print(f"Invalid label detected: {label}")
-                continue
-            cx, cy, w, h = bbox
-            x0, y0 = int((cx - w / 2) * image.shape[1]), int((cy - h / 2) * image.shape[0])
-            x1, y1 = int((cx + w / 2) * image.shape[1]), int((cy + h / 2) * image.shape[0])
-        elif selected_model_name == "YOLOv11":
-            x0, y0, x1, y1 = map(int, bbox)
+    CLASS_IMAGES = {
+        'car': 'https://img.icons8.com/color/48/000000/car--v1.png',
+        'traffic light': 'https://i.ibb.co/KG6PrDH/icons8-traffic-lights-sign-96.png',
+        'person': 'https://i.ibb.co/3zFHGg2/icons8-person-96-2.png',
+        'bicycle': 'https://i.ibb.co/d4tnFHP/icons8-bicycle-100.png',
+        'bus': 'https://i.ibb.co/0f20RxR/icons8-bus-96.png',
+        'truck': 'https://i.ibb.co/HD53Wtq/icons8-truck-96.png'
+    }
 
-        height_bb = abs(y1 - y0)
+    def get_class_icon(class_name):
+        return CLASS_IMAGES.get(class_name, 'https://img.icons8.com/color/48/000000/car--v1.png')
 
-        # Recortar región del mapa de profundidad correspondiente al bounding box
-        bbox_depth = depth[y0:y1, x0:x1]
-        bbox_valid = bbox_depth[bbox_depth > 0]
-
-        # Calcular distancia media en región válida
-        if len(bbox_valid) > 0:
-            median_distance = np.median(bbox_valid) #* (100 / 255)  # Limitar rango de 0-100 metros para valores 0-255
-        else:
-            median_distance = float('inf')
-
-        # Agregar información del objeto detectado
-        objects_info.append({
-            'id': idx,
-            'class': class_names[label],
-            'height': height_bb,
-            'bbox': [x0, y0, x1, y1],
-            'distance': median_distance
-        })
-        
-
-        # Diccionario para las imagenes de las clases seleccionadas
-        CLASS_IMAGES = {
-            'car': 'https://img.icons8.com/color/48/000000/car--v1.png',
-            'traffic light': 'https://i.ibb.co/KG6PrDH/icons8-traffic-lights-sign-96.png',
-            'person': 'https://i.ibb.co/3zFHGg2/icons8-person-96-2.png',
-            'bicycle': 'https://i.ibb.co/d4tnFHP/icons8-bicycle-100.png',
-            'bus': 'https://i.ibb.co/0f20RxR/icons8-bus-96.png',
-            'truck': 'https://i.ibb.co/HD53Wtq/icons8-truck-96.png'
-        }
-
-        def get_class_icon(class_name):
-            return CLASS_IMAGES.get(class_name, 'https://img.icons8.com/color/48/000000/car--v1.png')
-       
-
-
-        # Tarjeta para el objeto detectado
+    for obj in objects_info:
         cards_html += f"""
         <div class="card">
             <h3>
-                <img src={get_class_icon(class_names[label])} alt="Object Icon">
-                Object ID: {idx}
+                <img src={get_class_icon(obj['class'])} alt="Object Icon">
+                Object ID: {obj['id']}
             </h3>
-            <p><strong>Class:</strong> {class_names[label]}</p>
-            <p><strong>Height:</strong> {height_bb} pixels</p>
-            <p><strong>Coordinates:</strong> ({x0}, {y0}) to ({x1}, {y1})</p>
-            <p><strong>Distance:</strong> {median_distance:.2f} meters</p>
+            <p><strong>Class:</strong> {obj['class']}</p>
+            <p><strong>Height:</strong> {obj['height']} pixels</p>
+            <p><strong>Coordinates:</strong> ({obj['bbox'][0]}, {obj['bbox'][1]}) to ({obj['bbox'][2]}, {obj['bbox'][3]})</p>
+            <p><strong>Distance:</strong> {obj['distance']:.2f} meters</p>
         </div>
         """
-
-    # Finalizar el contenedor de la grilla
     cards_html += "</div>"
-
-
-    # Ordenar los objetos por distancia
-    objects_info.sort(key=lambda x: x['distance'])
-    
-    # Reasignar los objetos ordenados
-    for new_idx, obj in enumerate(objects_info, start=1):
-        obj['id'] = new_idx 
 
     # Visualizar y guardar resultados en Plotly
     fig = go.Figure()
 
     # Añadir la imagen original al gráfico
-    fig.add_trace(go.Image(
-        z=image,
-        colormodel='rgb'
-    ))
+    fig.add_trace(go.Image(z=image, colormodel='rgb'))
 
     # Añadir las cajas delimitadoras sobre la imagen
     for obj in objects_info:
         x0, y0, x1, y1 = obj['bbox']
-        color = px.colors.qualitative.Plotly[COCO_INSTANCE_CATEGORY_NAMES.index(obj['class']) % len(px.colors.qualitative.Plotly)]
+        color = px.colors.qualitative.Plotly[class_names.index(obj['class']) % len(px.colors.qualitative.Plotly)]
         fig.add_shape(
             type="rect",
             x0=x0, y0=y0, x1=x1, y1=y1,
@@ -592,6 +579,7 @@ def object_detection_with_disparity(selected_model_name):
 
     return fig, cards_html
 
+
 # Función para el cálculo de distancia segura y gráficos de decisión
 def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_id):
     global objects_info
@@ -615,7 +603,7 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object
     if not distances:
         return gr.Warning("⚠️ None of the selected objects have valid distances.")
 
-    # Calculate average height and distance of selected objects
+    # Calcula la altura promedio y la distancia de los objetos seleccionados.
     avg_height = np.mean([obj['height'] for obj in selected_objects])
     avg_distance = np.mean(distances)
 
@@ -644,7 +632,8 @@ def update_vehicle_params(vehicle_model):
         "Toyota Supra": (10.40, 0.4953, 2.47),
         "Ford Mustang Shelby GT350": (12.67, 0.4953, 2.72)
     }
-    return vehicle_params.get(vehicle_model, (0, 0, 0))
+    return vehicle_params.get(vehicle_model, (11.4, 0.55, 2.71))  # Por defecto Volkswagen Passat (B6)
+
 
 # Diseño de la interfaz de Gradio
 class Seafoam(Base):
@@ -751,13 +740,13 @@ with gr.Blocks(theme=seafoam) as demo:
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px; /* Espacio entre íconos y texto */
-            flex-wrap: nowrap; /* No permite que se rompa en varias líneas */
+            gap: 10px; 
+            flex-wrap: nowrap;
         }
 
         .title-text span {
             font-family: 'Poppins', sans-serif; /* Cambia la fuente a Poppins */
-            font-size: 2.5vw; /* Escala adaptativa según el ancho de la pantalla */
+            font-size: 2.0vw; /* Escala adaptativa según el ancho de la pantalla */
             font-weight: 500; /* Peso de la fuente */
             color: #333; /* Cambia el color del texto si lo necesitas */
             text-align: center;
@@ -971,9 +960,9 @@ with gr.Blocks(theme=seafoam) as demo:
                     choices=["Volkswagen Passat (B6)","Tesla S", "Toyota Supra", "Ford Mustang Shelby GT350"],
                     interactive=True
                 )
-                turning_car = gr.Slider(0.0, 20.0, value=10.0, step=1.0, label="Turning Car [°]")
-                cog = gr.Slider(0.0, 2.0, value=0.5, step=0.01, label="Height of Center Gravity (COG) [m]")
-                wheelbase = gr.Slider(0.0, 3.0, value=1.5, step=0.01, label="Width of Wheelbase [m]")
+                turning_car = gr.Slider(0.0, 20.0, value=11.4, step=1.0, label="Turning Car [°]")
+                cog = gr.Slider(0.0, 2.0, value=0.55, step=0.01, label="Height of Center Gravity (COG) [m]")
+                wheelbase = gr.Slider(0.0, 3.0, value=2.71, step=0.01, label="Width of Wheelbase [m]")
 
                 vehicle_name.change(
                     fn=update_vehicle_params, 

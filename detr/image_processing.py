@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 from torchvision import transforms as T
-from detr.model_loader import COCO_INSTANCE_CATEGORY_NAMES
+from detr.model_detr import COCO_INSTANCE_CATEGORY_NAMES
 
 # Generar colores aleatorios para las categorías
 COLORS = np.random.rand(len(COCO_INSTANCE_CATEGORY_NAMES), 3)
