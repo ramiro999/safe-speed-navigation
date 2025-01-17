@@ -1,53 +1,47 @@
-# Usar una imagen base moderna
+# Usar la imagen oficial de Python 3.11 slim como base
 FROM python:3.11-slim
 
-# Crear un usuario sin privilegios para ejecutar la aplicación
-RUN groupadd -r appgroup && useradd -r -g appgroup -m appuser
+# Variables de entorno
+ENV PYTHONUNBUFFERED=1
 
-# Asegurarse de que el directorio de inicio sea accesible
-RUN mkdir -p /home/appuser && chown -R appuser:appgroup /home/appuser
-
-# Establecer directorios temporales para Matplotlib y Torch
-ENV MPLCONFIGDIR=/tmp
-ENV TORCH_HOME=/tmp/torch
-
-# Instalar herramientas necesarias para compilar código nativo y bibliotecas requeridas
+# Actualizar sistema e instalar herramientas esenciales
 RUN apt-get update && apt-get install -y \
+    wget \
     build-essential \
     gcc \
     g++ \
-    make \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    wget \
+    libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Descargar e instalar una versión más reciente de libstdc++.so.6
-RUN wget http://ftp.us.debian.org/debian/pool/main/g/gcc-12/libstdc++6_12.2.0-14_amd64.deb && \
-    dpkg -i libstdc++6_12.2.0-14_amd64.deb && \
-    rm libstdc++6_12.2.0-14_amd64.deb
+# Descargar e instalar manualmente GCC más reciente
+RUN wget https://ftp.gnu.org/gnu/gcc/gcc-13.1.0/gcc-13.1.0.tar.gz \
+    && tar -xzf gcc-13.1.0.tar.gz \
+    && cd gcc-13.1.0 \
+    && ./contrib/download_prerequisites \
+    && mkdir build && cd build \
+    && ../configure --enable-languages=c,c++ --disable-multilib \
+    && make -j$(nproc) \
+    && make install \
+    && cd ../.. \
+    && rm -rf gcc-13.1.0 gcc-13.1.0.tar.gz
 
-# Verificar que GLIBCXX_3.4.32 está disponible
-RUN strings /usr/lib/x86_64-linux-gnu/libstdc++.so.6 | grep GLIBCXX
+# Actualizar enlaces simbólicos para libstdc++
+RUN ln -sf /usr/local/lib64/libstdc++.so.6 /usr/lib/x86_64-linux-gnu/libstdc++.so.6
 
-# Establecer el directorio de trabajo
-WORKDIR /app
+# Configurar el directorio de trabajo
+WORKDIR /safe-speed-navigation
 
-# Copiar los archivos del proyecto al contenedor
+# Copiar archivo de dependencias
+COPY requirements.txt .
+
+# Instalar dependencias de Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar el resto de los archivos del proyecto
 COPY . .
 
-# Actualizar pip e instalar dependencias del proyecto
-RUN pip install --upgrade pip --root-user-action=ignore
-RUN pip install --no-cache-dir -r requirements.txt --root-user-action=ignore
+# Navegar al directorio adecuado y ejecutar el script make.sh
+RUN cd stereo/NMRF/ops && sh make.sh && cd ../../..
 
-# Compilar MultiScaleDeformableAttention
-RUN cd stereo/NMRF/ops && sh make.sh
-
-# Cambiar al usuario sin privilegios
-USER appuser
-
-# Exponer el puerto de la aplicación
-EXPOSE 8000
-
-# Comando para ejecutar la aplicación
-CMD ["python", "app.py"]
+# Ejecutar la aplicación
+CMD ["python", "app.py", "0.0.0.0:8000"]

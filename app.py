@@ -22,6 +22,7 @@ from detr.image_processing import preprocess_image, plot_detr_results_with_dista
 from detr.model_detr import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
 from yolov11.model_yolo import load_yolov11_model
 from yolov11.image_processing_yolo import draw_yolo_results
+from metrics.IoU import calculate_iou, inter_model_agreement, save_metrics_to_file
 
 # Añadir directorios al path
 sys.path.extend([
@@ -389,6 +390,8 @@ def object_detection_with_disparity(selected_model_name):
     depth = cv2.cvtColor(depth_map_colored, cv2.COLOR_BGR2GRAY)
     image = cv2.imread(image_path_left_original, cv2.IMREAD_COLOR)
 
+    detr_bboxes, yolo_bboxes = [], []  # Inicializar variables para las cajas delimitadoras
+
     # Seleccionar las clases según el modelo
     if selected_model_name == "DETR":
         class_names = COCO_INSTANCE_CATEGORY_NAMES
@@ -408,14 +411,24 @@ def object_detection_with_disparity(selected_model_name):
         keep = probas.max(-1).values > 0.8
         bboxes = outputs['pred_boxes'][0, keep].numpy()
         labels = probas[keep].argmax(-1).numpy()
+        detr_bboxes = outputs['pred_boxes'][0, keep].numpy()
 
     elif selected_model_name == "YOLOv11":
         # Procesar con YOLOv11
         results = yolov11_model(image_path_left_original)
         bboxes = [box.xyxy[0].tolist() for box in results[0].boxes]
         labels = [int(box.cls[0]) for box in results[0].boxes]
+        yolo_bboxes = [box.xyxy[0].tolist() for box in results[0].boxes]
     else:
         return None, gr.Warning("Invalid model selected.")
+    
+
+    # Calcular la intersección sobre la unión (IoU) entre las detecciones de DETR y YOLOv11
+    if len(detr_bboxes) > 0 and len(yolo_bboxes) > 0:
+        metrics = inter_model_agreement(detr_bboxes, yolo_bboxes) # Calcular metricas de IoU
+        save_metrics_to_file(metrics)  # Guardar las métricas en un archivo .txt
+        print(f"Inter-model agreement metrics saved successfully: {metrics}")
+
 
     # Procesar información de objetos detectados
     objects_info = []
