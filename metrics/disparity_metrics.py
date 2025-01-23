@@ -3,13 +3,10 @@ import cv2
 from sklearn.cluster import KMeans
 
 def disp_read(filename):
-    """Load disparity map from PNG file."""
     I = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)
-    #if len(I.shape) == 3 and I.shape[-1] > 1:
-        #I = cv2.cvtColor(cv2.imread(filename), cv2.COLOR_BGR2GRAY).astype(np.float32)
-        
     D = I.astype(np.float32) / 256.0
-    #D[I == 0] = -1  # Set invalid pixels
+    D[I == 0] = -1  # Píxeles inválidos
+    D[D < 0] = 0  # Eliminar valores negativos no deseados
     return D
 
 
@@ -124,7 +121,7 @@ def calculate_bmpre(D_gt, D_est, delta, delta_prime):
     tau = np.where(D_gt[mask_valid] > 0, relative_error, 0)
 
     # Contar píxeles que superan el umbral delta
-    bmpre = np.sum(tau[delta_error > delta]) / np.sum(delta_error > delta_prime)
+    bmpre = np.sum(tau[delta_error > delta]) / (np.sum(delta_error > delta_prime) + 1e-8)
     return bmpre * 100  # Convertir a porcentaje
 
 # Ejemplo de uso con valores ficticios
@@ -132,7 +129,9 @@ D_gt = disp_read("../ground_truth/disparity_maps/000013_10.png")
 D_est = disp_read("../outputs/disparity_results/000013_10.png")
 
 # Normalizar la disparidad estimada
-# D_est = (D_est / np.max(D_est)) * np.max(D_gt[D_gt > 0]) 
+D_est = (D_est / np.max(D_est)) * np.max(D_gt[D_gt > 0]) 
+D_est[D_est < 0] = 0  # Evitar valores negativos
+
 
 
 f = 725.0087  # Ejemplo de longitud focal
@@ -232,14 +231,34 @@ print(f"Valor mínimo de D_est: {min_D_est}")
 print(f"Valor máximo de D_est: {max_D_est}")
 
 # Acceder a los primeros 100 píxeles de cada imagen y crear listas con sus valores
-D_gt_values = D_gt.flatten()[:1000]
-D_est_values = D_est.flatten()[:1000]
+D_gt_values = D_gt.flatten()[:100]
+D_est_values = D_est.flatten()[:100]
 
 # Mostrar los valores de los primeros 100 píxeles
-print("Primeros 1000 valores de D_gt:")
+print("Primeros 100 valores de D_gt:")
 print(D_gt_values)
 
-print("Primeros 1000 valores de D_est:")
+print("Primeros 100 valores de D_est:")
 print(D_est_values)
 
 ##################### -------------------------- #####################
+
+# Redirigir la salida de los prints a un archivo .txt
+with open('/home/ramiro-avila/safe-speed-navigation/metrics/resultados.txt', 'w') as f:
+    f.write(f"MSE: {mse_value:.5f}\n")
+    f.write(f"SZE: {sze_value:.5f}\n")
+    f.write(f"BMP: {bmp_value:.5f}%\n")
+    f.write(f"MRE: {mre_value:.2f}%\n")
+    f.write(f"BMPRE: {bmpre_value:.5f}%\n")
+    f.write(f"RMSE: {rmse_value:.5f}\n")
+    
+    f.write(f"Valor mínimo de D_gt: {min_D_gt}\n")
+    f.write(f"Valor máximo de D_gt: {max_D_gt}\n")
+    f.write(f"Valor mínimo de D_est: {min_D_est}\n")
+    f.write(f"Valor máximo de D_est: {max_D_est}\n")
+    
+    f.write("Primeros 1000 valores de D_gt:\n")
+    np.savetxt(f, D_gt_values, fmt='%.5f')
+    
+    f.write("Primeros 1000 valores de D_est:\n")
+    np.savetxt(f, D_est_values, fmt='%.5f')
