@@ -1,54 +1,73 @@
+import cv2
 import numpy as np
 
-def calculate_d1_metric(D_est, D_gt, mask=None, threshold_abs=3, threshold_rel=0.05):
-    """
-    Calcula la métrica D1 para un disparity map estimado.
+def disp_read(filename):
+    """Load disparity map from PNG file."""
+    I = cv2.imread(filename, cv2.IMREAD_UNCHANGED).astype(np.float32)
+    if len(I.shape) == 3 and I.shape[-1] > 1:
+        I = cv2.cvtColor(cv2.imread(filename), cv2.COLOR_BGR2GRAY).astype(np.float32)
+    D = I.astype(np.float32) / 256.0
+    D[I == 0] = -1  # Set invalid pixels
+    return D
 
-    Args:
-        D_est (numpy.ndarray): Disparity map estimado.
-        D_gt (numpy.ndarray): Ground truth del disparity map.
-        mask (numpy.ndarray, opcional): Máscara binaria que define las regiones de interés (1=considerar, 0=ignorar).
-        threshold_abs (float): Umbral absoluto (en píxeles).
-        threshold_rel (float): Umbral relativo (proporción de la disparidad del ground truth).
+def disp_write(D, filename):
+    """Save disparity map to PNG file."""
+    D = np.clip(D * 256, 0, 65535).astype(np.uint16)
+    cv2.imwrite(filename, D)
 
-    Returns:
-        float: Porcentaje de píxeles incorrectos según la métrica D1.
-    """
-    # Asegurarse de que mask está definido
-    if mask is None:
-        mask = np.ones_like(D_gt, dtype=bool)  # Considerar toda la imagen
-    
-    # Filtrar valores válidos usando la máscara
-    valid_pixels = mask & (D_gt > 0)  # Considerar solo píxeles válidos en el ground truth
-    
-    # Calcular el error absoluto entre D_est y D_gt
-    error = np.abs(D_est - D_gt)
-    
-    # Calcular el umbral dinámico
-    threshold = np.maximum(threshold_abs, threshold_rel * D_gt)
-    
-    # Identificar píxeles incorrectos
-    incorrect_pixels = (error > threshold) & valid_pixels
-    
-    # Calcular porcentaje de píxeles incorrectos
-    D1_error = np.sum(incorrect_pixels) / np.sum(valid_pixels) * 100  # Porcentaje
-    
-    return D1_error
+def disp_error(D_gt, D_est, tau):
+    """Calculate disparity error."""
+    E = np.abs(D_gt - D_est)
+    valid_pixels = (D_gt > 0)
+    error_pixels = (E > tau[0]) & (E / np.abs(D_gt) > tau[1])
+    d_err = np.sum(error_pixels & valid_pixels) / np.sum(valid_pixels)
+    return d_err
 
+def disp_error_map(D_gt, D_est):
+    """Compute disparity error map."""
+    valid_pixels = (D_gt >= 0)
+    E = np.abs(D_gt - D_est)
+    E[~valid_pixels] = 0  # Set invalid pixels to zero
+    return E, valid_pixels
 
-# Ejemplo de disparity map y ground truth
-D_est = np.array([[10, 15, 20], [30, 25, 0], [0, 40, 45]], dtype=float)
-D_gt = np.array([[10, 15, 20], [30, 25, 5], [0, 40, 45]], dtype=float)
+def error_colormap():
+    """Define error colormap (RGB values normalized to 0-1 range)."""
+    return np.array([
+        [0/3.0, 0.1875/3.0, 49/255, 54/255, 149/255],
+        [0.1875/3.0, 0.375/3.0, 69/255, 117/255, 180/255],
+        [0.375/3.0, 0.75/3.0, 116/255, 173/255, 209/255],
+        # ... (continúa con el resto de los colores)
+    ])
 
-# Máscara para el fondo (bg)
-bg_mask = (D_gt < 30)  # Define el fondo como disparidades menores a 30
+# Ejemplo de uso
+if __name__ == "__main__":
+    D_est = disp_read('../disp_est.png')
+    D_gt = disp_read('../disp_gt.png')
+    D_gt[D_gt < 0] = 0  # Reemplazar valores negativos para evitar errores en cálculos
+    #D_est = (D_est / np.max(D_est)) * np.max(D_gt[D_gt > 0]) # Normalizar D_est para que tenga el mismo rango que D_gt (0 a max(D_gt)) 
+    D_est[D_est < 0] = -1.0 # Set invalid pixels to -1
 
-# Máscara para toda la imagen
-all_mask = np.ones_like(D_gt, dtype=bool)
+    print(f"Shape of D_est: {D_est.shape}")
+    print(f"Shape of D_gt: {D_gt.shape}")
 
-# Cálculo de D1 para fondo (D1-bg) y toda la imagen (D1-all)
-D1_bg = calculate_d1_metric(D_est, D_gt, mask=bg_mask)
-D1_all = calculate_d1_metric(D_est, D_gt, mask=all_mask)
+    # Error calculation
+    tau = [3, 0.05]
+    d_err = disp_error(D_gt, D_est, tau)
+    print(f"Disparity Error: {d_err :.5f}")
+    print("D_gt unique values:", np.unique(D_gt))
+    print("D_est unique values:", np.unique(D_est))
 
-print(f"D1-bg: {D1_bg:.2f}%")
-print(f"D1-all: {D1_all:.2f}%")
+    # Convertir a 8 bits para visualización
+    # D_est_8bit = cv2.normalize(D_est, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    # D_gt_8bit = cv2.normalize(D_gt, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+    # Convert D_est and D_gt to 8-bit grayscale images if they are not already
+    D_est_8bit = (D_est / np.max(D_est) * 255).astype(np.uint8)
+    D_gt_8bit = (D_gt / np.max(D_gt) * 255).astype(np.uint8)
+
+    # Mostrar las imágenes usando OpenCV
+    cv2.imshow('D_est', D_est_8bit)
+    cv2.imshow('D_gt', D_gt_8bit)
+
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()

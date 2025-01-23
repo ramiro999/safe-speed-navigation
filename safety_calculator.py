@@ -93,14 +93,23 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     turningCar = turning_angle  # Ángulo de giro del vehículo
 
     object_distance = object_distance # Distancia del objeto al sistema óptico en metros
-    object_height = object_height # Altura del objeto en metros
+    object_distance_mm = object_distance * 1000  # Distancia del objeto al sistema óptico en milímetros
+    object_height = object_height # Altura del objeto en pixeles
     
-    pixSize = 4.65e-3  # Tamaño del sensor height en milimetros
-    focalLength = 3.371290455  # Longitud focal en milimetros
+    pixSize = 4.65e-3  # Tamaño del pixel en milimetros
+    focalLengthPixels = 725.0087  # Longitud focal en pixeles
+    focalLength = focalLengthPixels * pixSize  # Longitud focal en milimetros
     imageHeight = 375  # Altura de la imagen en pixeles
-    gsd = (object_distance * pixSize) / (focalLength * imageHeight)  # Ground Sampling Distance (GSD) en centrimetros por pixel
 
-    hp = object_height * gsd  # Altura del ob   jeto en centrimetros
+    sensorSize = pixSize * imageHeight # Tamaño del sensor en milimetros
+
+    gsd = (object_distance_mm * sensorSize) / (focalLength * imageHeight)  # Ground Sampling Distance (GSD) en centrimetros por pixel
+
+    hp = object_height * gsd  # Altura del objeto en centrimetros para eliminar la dependencia de mm/pixel
+
+    hp = hp / 1000  # Altura del objeto en metros
+
+    pi = 3.141592653589793
 
     # Rangos de velocidad
     v_mph = np.arange(1, 151)  # Velocidades de 1 a 150 mph
@@ -222,9 +231,9 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     fig2 = go.Figure()
     fig2.add_trace(go.Scatter(
         x=looakheadDistance,
-        y=IFOVp * 1e3,  # Convertir a miliradianes
+        y=IFOVp * (180/ np.pi),   # Grados
         mode='lines',
-        name=f'Object Size: {hp:.5f} cm',
+        name=f'Object Size: {hp:.4f} meters',
         line=dict(width=3)
     ))
 
@@ -233,10 +242,10 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         selected_ifov = np.arctan(hc / object_distance) - np.arctan((hc - hp) / object_distance)
         fig2.add_trace(go.Scatter(
             x=[object_distance],
-            y=[selected_ifov * 1e3],  # Convertir a miliradianes
+            y=[selected_ifov * (180/np.pi)],  # Grados
             mode='markers+text',
             name='Selected Object',
-            text=[f'IFOV: {selected_ifov * 1e3:.2f} miliradians\nDistance: {object_distance:.2f} meters'],
+            text=[f'IFOV: {selected_ifov * (180/np.pi):.2f} degrees<br>Distance: {object_distance:.2f} meters'],
             textposition='top right',
             marker=dict(color='yellow', size=15),
             showlegend=True
@@ -246,16 +255,16 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         fig2.add_shape(
             type='line',
             x0=object_distance,
-            y0=0.1,  # Mínimo valor de IFOV en miliradianes
+            y0=0.1,  # Mínimo valor de IFOV en grados
             x1=object_distance,
-            y1=max(IFOVp) * 1e3,
+            y1=max(IFOVp) * (180/np.pi),  # Máximo valor de IFOV en grados
             line=dict(color='yellow', width=2, dash='dash')
         )
 
     fig2.update_layout(
-        title='Positive Obstacle IFOV',
+        title='Obstacle IFOV',
         xaxis_title='Sensor distance to the scene [m]',
-        yaxis_title='IFOV [milliradians]',
+        yaxis_title='IFOV [degrees]',
         xaxis_type='log',  # Escala logarítmica en x
         yaxis_type='log',  # Escala logarítmica en y
         xaxis=dict(

@@ -52,7 +52,6 @@ stereo_output_image = None
 image_path_left_original = None
 objects_info = []  # Almacenar los objetos detectados en la imagen
 
-
 gr.HTML("""
 <style>
     body {
@@ -229,7 +228,6 @@ gr.HTML("""
 </style>
 """)
 
-
 def save_temp_image(image_array):
     """
     Guarda una imagen numpy.ndarray en un archivo temporal y devuelve la ruta del archivo.
@@ -255,8 +253,8 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     global stereo_output_image, image_path_left_original # Variables globales para almacenar la imagen de salida y la imagen original
     image_path_left_original = image_path_left 
     dataset_name = "kitti" 
-    output = "./resultados_kitti"
-    resume_path = "./stereo/NMRF/pretrained/sceneflow.pth" # Ruta del modelo pre-entrenado con sceneflow.pth
+    output = "./outputs/disparity_results" # Carpeta de salida para los resultados
+    resume_path = "./stereo/NMRF/pretrained/kitti.pth" # Ruta del modelo pre-entrenado con sceneflow.pth
 
     # Crear una lista con las imágenes de entrada proporcionadas por el usuario
     image_list = [(image_path_left, image_path_right)]
@@ -277,7 +275,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
 
 def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
     """
-    Genera un mapa de profundidad con una barra de colores en el rango 0-255.
+    Genera un mapa de profundidad con una barra de colores en el rango de metros 0-100.
     """
     # Cargar el mapa de disparidad
     disparity = cv2.imread(disparity_path, cv2.IMREAD_GRAYSCALE)
@@ -295,25 +293,19 @@ def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725)
     # Calcular el mapa de profundidad
     depth_map = (focal_length * baseline) / disparity
 
-    # Aplicar límites razonables a la profundidad
+    # Aplicar límites razonables a la profundidad en metros
     depth_map[depth_map > 100] = 100
     depth_map[depth_map < 0] = 0
 
-    # Normalizar para visualización en el rango 0-255
-    depth_map_normalized = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX)
-
     # Crear figura con barra de colores
     fig, ax = plt.subplots(figsize=(10, 5), dpi=300, frameon=False)
-    im = ax.imshow(depth_map_normalized, cmap='inferno_r', vmin=0, vmax=255)
+    im = ax.imshow(depth_map, cmap='inferno_r', vmin=0, vmax=100)
     
-    # Agregar colorbar con rango 0-255
-    cbar = fig.colorbar(im, ax=ax, orientation='horizontal', label='Depth')
+    cbar = fig.colorbar(im, ax=ax, orientation='horizontal', label='Depth (meters)')
     cbar.ax.xaxis.label.set_color('white')
     cbar.ax.tick_params(color='white')  
     cbar.ax.xaxis.set_tick_params(color='white')
     plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='white')  # Cambiar el color de las etiquetas a blanco
-    cbar.set_ticks([0, 64, 128, 192, 255])  # Valores clave en el rango
-    cbar.ax.set_xticklabels(['0', '64', '128', '192', '255'])  # Escala en el rango 0-255
 
     # Cambiar el color de las etiquetas a negro si el tema del PC es claro
     if plt.rcParams['axes.facecolor'] == 'white':
@@ -335,7 +327,7 @@ def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725)
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0.1)
 
     # Guardar el resultado
-    output_path_with_colorbar = "./outputs/depth_with_colorbar_0_255.png"
+    output_path_with_colorbar = "./outputs/depth_with_colorbar.png"
     plt.savefig(output_path_with_colorbar, bbox_inches='tight', pad_inches=0, dpi=300, transparent=True)
     plt.close()
 
@@ -354,10 +346,6 @@ def only_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
     # Convertir a float32 para cálculos precisos
     disparity = disparity.astype(np.float32)
     
-    # Normalizar la disparidad si está en el rango 0-255
-    # Asumiendo que los valores máximos de disparidad están alrededor de 128-256 píxeles
-    #disparity = disparity / 16.0  # Factor común en mapas de disparidad
-    
     # Evitar divisiones por cero y valores muy pequeños
     min_disparity = 0.1
     disparity[disparity < min_disparity] = min_disparity
@@ -367,16 +355,14 @@ def only_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
 
     # Aplicar límites razonables a la profundidad
     depth_map[depth_map > 100] = 100  # Limitar a 100 metros
-    depth_map[depth_map < 0] = 0
+    depth_map[depth_map < 0] = 0 
 
-    # Normalizar para visualización
-    depth_map_normalized = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX)
-    depth_map_normalized = depth_map_normalized.astype(np.uint8)
+    # Guardar el resultado
+    output_path_with_colorbar = "./outputs/depth.png"
+    plt.savefig(output_path_with_colorbar, bbox_inches='tight', pad_inches=0, dpi=300, transparent=True)
+    plt.close()
 
-    # Aplicar un mapa de color para mejor visualización
-    depth_map_colored = cv2.applyColorMap(depth_map_normalized, cv2.COLORMAP_INFERNO)
-
-    return depth_map_colored
+    return depth_map
 
 # Función para detección de objetos y calcular la distancia usando la disparidad
 def object_detection_with_disparity(selected_model_name):
@@ -385,9 +371,8 @@ def object_detection_with_disparity(selected_model_name):
     if not stereo_output_image:
         return None, gr.Warning("A Stereo Inference output image has not been generated.")
 
-    # Generar el mapa de profundidad
-    depth_map_colored = only_depth_map(stereo_output_image)
-    depth = cv2.cvtColor(depth_map_colored, cv2.COLOR_BGR2GRAY)
+    # Generar el mapa de profundidad Z (en metros)
+    depth = only_depth_map(stereo_output_image)
     image = cv2.imread(image_path_left_original, cv2.IMREAD_COLOR)
 
     detr_bboxes, yolo_bboxes = [], []  # Inicializar variables para las cajas delimitadoras
@@ -452,7 +437,7 @@ def object_detection_with_disparity(selected_model_name):
 
         # Calcular distancia media en región válida
         if len(bbox_valid) > 0:
-            median_distance = np.median(bbox_valid)  # Limitar rango de 0-100 metros para valores 0-255
+            median_distance = np.median(bbox_valid) # Ya esta el escalado de 0-100 metros
         else:
             median_distance = float('inf')
 
@@ -597,44 +582,33 @@ def object_detection_with_disparity(selected_model_name):
 def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_id):
     global objects_info
 
-    if selected_object_id is None:
-        return gr.Warning("Please select at least one detected object to calculate the distance.")
+    if not selected_object_id:
+        return gr.Warning("Please select at least one detected object to calculate the distance."), None, None, None
 
-    # Ensure selected_object_id is a list
-    selected_object_ids = [selected_object_id] if isinstance(selected_object_id, int) else selected_object_id
-
-    # Filter selected objects
-    selected_objects = [obj for obj in objects_info if obj['id'] in selected_object_ids]
+    # Asegurarse de que el ID seleccionado existe en objects_info
+    selected_objects = [obj for obj in objects_info if obj['id'] == selected_object_id]
 
     if not selected_objects:
-        return gr.Warning("⚠️ Selected object ID not found in the detected objects.")
-    
-    # Verifica que las distancias de los objetos sean numéricas y válidas
-    distances = [obj.get('distance', None) for obj in selected_objects if isinstance(obj.get('distance', None), (int, float))]
-    distances = [dist for dist in distances if not (np.isinf(dist) or np.isnan(dist))]
+        return gr.Warning("⚠️ Selected object ID not found in the detected objects."), None, None, None
 
-    if not distances:
-        return gr.Warning("⚠️ None of the selected objects have valid distances.")
+    # Obtener altura y distancia del objeto seleccionado
+    obj = selected_objects[0]
+    object_height = obj['height']
+    object_distance = obj['distance']
 
-    # Calcula la altura promedio y la distancia de los objetos seleccionados.
-    avg_height = np.mean([obj['height'] for obj in selected_objects])
-    avg_distance = np.mean(distances)
+    if object_distance is None or object_distance == float('inf'):
+        return gr.Warning("⚠️ Invalid object distance, please select another object."), None, None, None
 
-    # Calculate decision graph using lookahead distance function
-    fig1, fig2, fig3, fig4 = calculate_lookahead_distance(
-        mu=mu,
-        t=t,
-        l=l,
-        B=B,
-        cog=cog,
-        wheelbase=wheelbase,
-        turning_angle=turning_car,
-        object_height=avg_height,
-        object_distance=avg_distance,
-        image_path=None
-    )
-
-    return fig1, fig2, fig3, fig4
+    # Calcular las distancias de seguridad
+    try:
+        fig1, fig2, fig3, fig4 = calculate_lookahead_distance(
+            mu=mu, t=t, l=l, B=B, cog=cog, wheelbase=wheelbase, 
+            turning_angle=turning_car, object_height=object_height, 
+            object_distance=object_distance, image_path=None
+        )
+        return fig1, fig2, fig3, fig4
+    except Exception as e:
+        return gr.Warning(f"Error during calculation: {str(e)}"), None, None, None
 
 
 # Función para actualizar los parámetros del vehículo según el modelo seleccionado
@@ -646,7 +620,6 @@ def update_vehicle_params(vehicle_model):
         "Ford Mustang Shelby GT350": (12.67, 0.4953, 2.72)
     }
     return vehicle_params.get(vehicle_model, (11.4, 0.55, 2.71))  # Por defecto Volkswagen Passat (B6)
-
 
 # Diseño de la interfaz de Gradio
 class Seafoam(Base):
@@ -692,8 +665,7 @@ with gr.Blocks(theme=seafoam) as demo:
             font-size: 36px;
             font-weight: bold;
             color: #333;
-            text-align: center;
-            margin-top: 15px;
+            text-align: center; 
         }
         .description-text {
             font-family: 'Arial', sans-serif;
@@ -796,7 +768,7 @@ with gr.Blocks(theme=seafoam) as demo:
     """)
 
 
-    with gr.Tab("Stereo Inference"):
+    with gr.Tab("Stereo Inference", elem_id="stereo-inference-tab"):
         gr.Markdown("## Stereo Inference", elem_id="stereo-inference-title")
         gr.HTML("""
         <style>
@@ -861,8 +833,8 @@ with gr.Blocks(theme=seafoam) as demo:
                 #depth-button:hover {
                     background-color: #bdbdbd; 
                 }
-            }    
-                    
+            }
+    
         </style>
         <p style="text-align: center;">Upload a pair of stereo images or choose the Example Stereo Images below, to perform stereo inference and generate the disparity map.</p>
         """)
@@ -873,20 +845,19 @@ with gr.Blocks(theme=seafoam) as demo:
 
         # Agregar ejemplos de imágenes estéreos 
         gr.HTML('<div class="example-label">Example Stereo Images</div>')
+        
         examples = gr.Examples(
             examples=[
-            ["./stereo_images/images_left/000005_10.png", "./stereo_images/images_right/000005_10.png"],
-            ["./stereo_images/images_left/000070_11.png", "./stereo_images/images_right/000070_11.png"],
-            ["./stereo_images/images_left/000179_11.png", "./stereo_images/images_right/000179_11.png"],
-            ["./stereo_images/images_left/000194_11.png", "./stereo_images/images_right/000194_11.png"]
+            ["./stereo_images/kitti_images_left/000161_10.png", "./stereo_images/kitti_images_right/000161_10.png"],
+            ["./stereo_images/kitti_images_left/000020_10.png", "./stereo_images/kitti_images_right/000020_10.png"],
+            ["./stereo_images/kitti_images_left/000004_10.png", "./stereo_images/kitti_images_right/000004_10.png"],
+            ["./stereo_images/kitti_images_left/000013_10.png", "./stereo_images/kitti_images_right/000013_10.png"]
             ],
             inputs=[image_path_left, image_path_right]
         )
-        #164_10
-
 
         run_button = gr.Button("Run Inference", elem_id="inference-button")
-        output_image = gr.Image(label="Disparity Map", visible=True)
+        output_image = gr.Image(label="Disparity Map", visible=True, scale=1, elem_id="disparity-map")
         run_button.click(stereo_inference, inputs=[image_path_left, image_path_right], outputs=output_image)
 
         generate_depth_button = gr.Button("Generate Depth Map", elem_id="depth-button")
@@ -996,7 +967,7 @@ with gr.Blocks(theme=seafoam) as demo:
                 distance_plot1 = gr.Plot(label="Angle of View (AOV)")
                 distance_plot3 = gr.Plot(label="Lookahead Distance for Stopping")
             with gr.Column():
-                distance_plot2 = gr.Plot(label="Positive Obstacle IFOV")
+                distance_plot2 = gr.Plot(label="Obstacle IFOV")
                 distance_plot4 = gr.Plot(label="Lookahead Distance for Swerving")
                 
         # Conexión la función calculate_distance con los componentes de entrada/salida
