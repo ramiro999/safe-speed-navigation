@@ -254,7 +254,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     image_path_left_original = image_path_left 
     dataset_name = "kitti" 
     output = "./outputs/disparity_results" # Carpeta de salida para los resultados
-    resume_path = "./stereo/NMRF/pretrained/kitti.pth" # Ruta del modelo pre-entrenado con sceneflow.pth
+    resume_path = "./stereo/NMRF/pretrained/sceneflow.pth" # Ruta del modelo pre-entrenado con sceneflow.pth
 
     # Crear una lista con las imágenes de entrada proporcionadas por el usuario
     image_list = [(image_path_left, image_path_right)]

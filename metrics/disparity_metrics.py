@@ -125,8 +125,8 @@ def calculate_bmpre(D_gt, D_est, delta, delta_prime):
     return bmpre * 100  # Convertir a porcentaje
 
 # Ejemplo de uso con valores ficticios
-D_gt = disp_read("../ground_truth/disparity_maps/000013_10.png")
-D_est = disp_read("../outputs/disparity_results/000013_10.png")
+D_gt = disp_read("../ground_truth/disparity_maps/000020_10.png")
+D_est = disp_read("../outputs/disparity_results/000020_10.png")
 
 # Normalizar la disparidad estimada
 D_est = (D_est / np.max(D_est)) * np.max(D_gt[D_gt > 0]) 
@@ -187,7 +187,7 @@ plt.title('Histograma de los valores de D_gt')
 plt.xlabel('Valor de disparidad')
 plt.ylabel('Frecuencia')
 plt.grid(True)
-plt.savefig('/home/ramiro-avila/safe-speed-navigation/metrics/D_gt_histograma.png')
+plt.savefig('/home/ramiro-avila/safe-speed-navigation/metrics/data_analysis/D_gt_histograma.png')
 plt.clf()  # Limpiar la figura para el siguiente histograma
 
 # Generar histograma de los valores de D_est
@@ -196,7 +196,7 @@ plt.title('Histograma de los valores de D_est')
 plt.xlabel('Valor de disparidad')
 plt.ylabel('Frecuencia')
 plt.grid(True)
-plt.savefig('/home/ramiro-avila/safe-speed-navigation/metrics/D_est_histograma.png')
+plt.savefig('/home/ramiro-avila/safe-speed-navigation/metrics/data_analysis/D_est_histograma.png')
 
 
 # Generar gráfico de dispersión (scatter plot) de D_gt vs D_est
@@ -205,7 +205,7 @@ plt.title('Gráfico de dispersión de D_gt vs D_est')
 plt.xlabel('D_gt')
 plt.ylabel('D_est')
 plt.grid(True)
-plt.savefig('/home/ramiro-avila/safe-speed-navigation/metrics/D_gt_vs_D_est_scatter.png')
+plt.savefig('/home/ramiro-avila/safe-speed-navigation/metrics/data_analysis/D_gt_vs_D_est_scatter.png')
 plt.clf()  # Limpiar la figura para el siguiente gráfico
 
 # Generar gráfico de líneas para comparar D_gt y D_est
@@ -216,7 +216,7 @@ plt.xlabel('Índice de píxel')
 plt.ylabel('Valor de disparidad')
 plt.legend()
 plt.grid(True)
-plt.savefig('/home/ramiro-avila/safe-speed-navigation/metrics/D_gt_vs_D_est_line_plot.png')
+plt.savefig('/home/ramiro-avila/safe-speed-navigation/metrics/data_analysis/D_gt_vs_D_est_line_plot.png')
 
 # Calcular y mostrar el valor mínimo y máximo de D_gt
 min_D_gt = np.min(D_gt[D_gt > 0])  # Ignorar valores inválidos
@@ -244,7 +244,7 @@ print(D_est_values)
 ##################### -------------------------- #####################
 
 # Redirigir la salida de los prints a un archivo .txt
-with open('/home/ramiro-avila/safe-speed-navigation/metrics/resultados.txt', 'w') as f:
+with open('/home/ramiro-avila/safe-speed-navigation/metrics/data_analysis/resultados.txt', 'w') as f:
     f.write(f"MSE: {mse_value:.5f}\n")
     f.write(f"SZE: {sze_value:.5f}\n")
     f.write(f"BMP: {bmp_value:.5f}%\n")
