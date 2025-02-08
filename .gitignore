@@ -4,6 +4,7 @@ __pycache__/
 resultados_kitti/
 stereo_images/
 
+
 stereo/NMRF/.idea/
 stereo/NMRF/.vscode/
 stereo/NMRF/__pycache__/

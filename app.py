@@ -31,26 +31,12 @@ sys.path.extend([
 ])
 
 from stereo.NMRF.disparity_inference import run_inference
-from stereo.NMRF.nmrf.utils.frame_utils import readDepthVKITTI
+from stereo.NMRF.nmrf.utils.frame_utils import readDepthVKITTI, writeDispKITTI
+
 
 """
 Función main para la interfaz de Gradio.
 """
- 
-# Cargar el modelo DETR
-detr_model = load_detr_model()
-
-# Cargar el modelo YOLOv11
-yolo_model_path = "./yolov11/model/yolo11s.pt"
-yolov11_model = load_yolov11_model(yolo_model_path)  # Carga el modelo YOLOv11
-
-# Variable para el modelo seleccionado
-selected_model = "DETR"  # Esto se actualizará según la selección del usuario
-
-# Variable global para almacenar la imagen de salida de Stereo Inference
-stereo_output_image = None
-image_path_left_original = None
-objects_info = []  # Almacenar los objetos detectados en la imagen
 
 gr.HTML("""
 <style>
@@ -228,13 +214,30 @@ gr.HTML("""
 </style>
 """)
 
+# Cargar el modelo DETR
+detr_model = load_detr_model()
+
+# Cargar el modelo YOLOv11
+yolo_model_path = "./yolov11/model/yolo11s.pt"
+yolov11_model = load_yolov11_model(yolo_model_path)  # Carga el modelo YOLOv11
+
+# Variable para el modelo seleccionado
+selected_model = "DETR"  # Esto se actualizará según la selección del usuario
+
+# Variable global para almacenar la imagen de salida de Stereo Inference
+stereo_output_image = None
+stereo_output_pred = None
+image_path_left_original = None
+objects_info = []  # Almacenar los objetos detectados en la imagen
+
 def save_temp_image(image_array):
     """
     Guarda una imagen numpy.ndarray en un archivo temporal y devuelve la ruta del archivo.
     """
-    temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-    cv2.imwrite(temp_file.name, image_array)
-    return temp_file.name
+    temp_dir = tempfile.gettempdir()
+    temp_file_path = os.path.join(temp_dir, f"image_{len(os.listdir(temp_dir)) + 1:02d}.png")
+    cv2.imwrite(temp_file_path, image_array)
+    return temp_file_path
 
 def stereo_inference(image_path_left=None, image_path_right=None):
     """
@@ -250,7 +253,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     if not isinstance(image_path_left, str) or not isinstance(image_path_right, str):
         return gr.Warning("Inputs must be file paths or numpy.ndarray images.")
 
-    global stereo_output_image, image_path_left_original # Variables globales para almacenar la imagen de salida y la imagen original
+    global stereo_output_image, image_path_left_original, stereo_output_pred # Variables globales para almacenar la imagen de salida, la imagen original y el valor de disparidad
     image_path_left_original = image_path_left 
     dataset_name = "kitti" 
     output = "./outputs/disparity_results" # Carpeta de salida para los resultados
@@ -260,7 +263,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     image_list = [(image_path_left, image_path_right)]
 
     # Realizar la inferencia usando las imágenes proporcionadas
-    run_inference(dataset_name, output, resume_path, image_list, show_attr="disparity")
+    disp_preds = run_inference(dataset_name, output, resume_path, image_list, show_attr="disparity")
 
     # Buscar la última imagen generada en la carpeta de resultados
     result_files = [os.path.join(output, f) for f in os.listdir(output) if f.endswith(".png")]
@@ -268,23 +271,34 @@ def stereo_inference(image_path_left=None, image_path_right=None):
         # Ordenar por fecha de modificación
         result_files.sort(key=os.path.getmtime, reverse=True)
         stereo_output_image = os.path.abspath(result_files[0])
+
+        # Guardar el disp_pred como archivo .npy
+        disp_pred_path = os.path.join(output, "disp_pred.npy")
+        np.save(disp_pred_path, disp_preds[0]) # Guardar el primer disp_pred
+
+        stereo_output_pred = disp_preds[0]  # Guardar la matriz de disparidad en la variable global
+
+        print(f"Disparity prediction saved at: {disp_pred_path}")
+
         return gr.update(value=stereo_output_image, visible=True)
 
     # En caso de que no se encuentre un archivo, lanzar un error
     raise FileNotFoundError("No generated image was found in the results folder.")
 
-def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
+def generate_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.532725):
     """
     Genera un mapa de profundidad con una barra de colores en el rango de metros 0-100.
     """
-    # Cargar el mapa de disparidad
-    disparity = cv2.imread(disparity_path, cv2.IMREAD_GRAYSCALE)
+    global stereo_output_pred
 
-    if disparity is None:
-        raise ValueError("No se pudo cargar el mapa de disparidad.")
+    if stereo_output_pred is None:
+        raise ValueError("No disparity data available.")
+
+    # Usar la matriz de disparidad global si no se proporciona una ruta
+    disparity = stereo_output_pred
 
     # Convertir a float32 para cálculos precisos
-    disparity = disparity.astype(np.float32)
+    # disparity = disparity.astype(np.float32)
 
     # Evitar divisiones por cero y valores muy pequeños
     min_disparity = 0.1
@@ -294,8 +308,8 @@ def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725)
     depth_map = (focal_length * baseline) / disparity
 
     # Aplicar límites razonables a la profundidad en metros
-    depth_map[depth_map > 100] = 100
-    depth_map[depth_map < 0] = 0
+    # depth_map[depth_map > 100] = 100
+    # depth_map[depth_map < 0] = 0
 
     # Crear figura con barra de colores
     fig, ax = plt.subplots(figsize=(10, 5), dpi=300, frameon=False)
@@ -333,18 +347,20 @@ def generate_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725)
 
     return output_path_with_colorbar
 
-def only_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
+def only_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.532725):
     """
     Genera un mapa de profundidad a partir de un mapa de disparidad.
     """
-    # Cargar el mapa de disparidad
-    disparity = cv2.imread(disparity_path, cv2.IMREAD_GRAYSCALE)
-    
-    if disparity is None:
-        raise ValueError("No se pudo cargar el mapa de disparidad.")
+    global stereo_output_pred
 
+    if stereo_output_pred is None:
+        raise ValueError("No disparity data available.")
+
+    # Usar la matriz de disparidad global si no se proporciona una ruta
+    disparity = stereo_output_pred
+    
     # Convertir a float32 para cálculos precisos
-    disparity = disparity.astype(np.float32)
+    # disparity = disparity.astype(np.float32)
     
     # Evitar divisiones por cero y valores muy pequeños
     min_disparity = 0.1
@@ -354,25 +370,26 @@ def only_depth_map(disparity_path, focal_length=725.0087, baseline=0.532725):
     depth_map = (focal_length * baseline) / disparity
 
     # Aplicar límites razonables a la profundidad
-    depth_map[depth_map > 100] = 100  # Limitar a 100 metros
-    depth_map[depth_map < 0] = 0 
+    # depth_map[depth_map > 100] = 100  # Limitar a 100 metros
+    # depth_map[depth_map < 0] = 0 
 
-    # Guardar el resultado
-    output_path_with_colorbar = "./outputs/depth.png"
-    plt.savefig(output_path_with_colorbar, bbox_inches='tight', pad_inches=0, dpi=300, transparent=True)
-    plt.close()
+    print(depth_map.shape, depth_map.dtype)
 
-    return depth_map
+    # Guardar el mapa de profundidad como imagen
+    output_path = "./outputs/depth.png"
+    plt.imsave(output_path, depth_map, cmap="inferno_r", vmin=0, vmax=100)
+
+    return depth_map, output_path
+
 
 # Función para detección de objetos y calcular la distancia usando la disparidad
 def object_detection_with_disparity(selected_model_name):
     global stereo_output_image, image_path_left_original, objects_info
-
     if not stereo_output_image:
         return None, gr.Warning("A Stereo Inference output image has not been generated.")
 
     # Generar el mapa de profundidad Z (en metros)
-    depth = only_depth_map(stereo_output_image)
+    depth, depth_map_path = only_depth_map()
     image = cv2.imread(image_path_left_original, cv2.IMREAD_COLOR)
 
     detr_bboxes, yolo_bboxes = [], []  # Inicializar variables para las cajas delimitadoras
@@ -871,6 +888,9 @@ with gr.Blocks(theme=seafoam) as demo:
 
             # Generar el mapa de profundidad con la barra de colores
             depth_output_path_with_colorbar = generate_depth_map(stereo_output_image)
+
+            # Generar y guardar el mapa de profundidad sin visualizar
+            only_depth_map(stereo_output_image)
 
             # Devolver la imagen generada directamente
             return gr.update(value=depth_output_path_with_colorbar, visible=True)

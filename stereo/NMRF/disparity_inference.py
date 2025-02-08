@@ -4,6 +4,7 @@ import multiprocessing as mp
 import os
 import torch
 import cv2
+import numpy as np
 
 from nmrf.config import get_cfg
 from nmrf.utils.logger import setup_logger
@@ -65,6 +66,7 @@ def get_parser():
 @torch.no_grad()
 def run_on_dataset(dataset, model, output, find_output_path=None, show_attr="disparity"):
     model.eval()
+    disp_preds = []
 
     for idx in range(len(dataset)):
         sample = dataset[idx]
@@ -85,8 +87,9 @@ def run_on_dataset(dataset, model, output, find_output_path=None, show_attr="dis
             error[~valid] = 0
             visualized_output = viz.draw_error_map(error)
         elif show_attr == "disparity":
-            disp_pred = result_dict["disp"][0].cpu()
-            visualized_output = viz.draw_disparity(disp_pred, colormap="kitti")
+            disp_pred = result_dict["disp"][0].cpu() # Guardar en una matriz de numpy y pasarla como output
+            #dis_pred es un tensor de torch, se debe convertir a numpy para guardarlo
+            visualized_output = viz.draw_disparity(disp_pred, colormap="kitti") # Esta es para visualizacion, no para procesar
         else:
             raise ValueError(f"not supported visualization attribute {show_attr}")
 
@@ -96,13 +99,20 @@ def run_on_dataset(dataset, model, output, find_output_path=None, show_attr="dis
             output_path = os.path.join(output, find_output_path(file_path))
             dirname = os.path.dirname(output_path)
             os.makedirs(dirname, exist_ok=True)
+            # Guardar disp_pred como archivo .npy
+            np.save(output_path.replace('.png', '.npy'), disp_pred.numpy())
+            # Guardar visualized_output como imagen
             visualized_output.save(output_path)
+        
         else:
             cv2.namedWindow(f"{show_attr}", cv2.WINDOW_NORMAL)
             cv2.imshow(f"{show_attr}", visualized_output.get_image()[:, :, ::-1])
             if cv2.waitKey(0) == 27:
                 break  # esc to quit
+        
+        disp_preds.append(disp_pred.numpy())
 
+    return disp_preds
 
 @torch.no_grad()
 def create_kitti_submission(model, image_set, output):
@@ -165,4 +175,5 @@ def run_inference(dataset_name, output, resume_path, image_list, show_attr="disp
     dataset.extra_info = [None] * len(image_list)
 
     # Ejecutar la inferencia en el dataset creado con las imágenes del usuario
-    run_on_dataset(dataset, model, output, _find_output_path(os.path.dirname(image_list[0][0])), show_attr)
+    disp_preds = run_on_dataset(dataset, model, output, _find_output_path(os.path.dirname(image_list[0][0])), show_attr)
+    return disp_preds

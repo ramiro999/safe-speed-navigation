@@ -266,7 +266,7 @@ def writeFlowKITTI(filename, uv):
 
 def writeDispKITTI(filename, disp):
     disp = np.round(disp * 256).astype(np.uint16)
-    cv2.imwrite(filename, disp)
+    cv2.imwrite(filename, disp) 
 
 
 def readOcclusionMap(filename):
