@@ -295,7 +295,7 @@ class TartanAir(StereoDataset):
 
 
 class KITTI(StereoDataset):
-    def __init__(self, aug_params=None, root='stereo/NMRF/datasets/KITTI', split='testing', image_set='kitti_mix'):
+    def __init__(self, aug_params=None, root='stereo_estimation/NMRF/datasets/KITTI', split='testing', image_set='kitti_mix'):
         print(f"Intentando acceder a la ruta: {root}")  # Añade esta línea para ver la ruta al crear la instancia
         super(KITTI, self).__init__(aug_params, sparse=True, reader=frame_utils.readDispKITTI)
         assert os.path.exists(root), f"La ruta {root} no existe."

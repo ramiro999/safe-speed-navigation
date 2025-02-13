@@ -15,24 +15,20 @@ from gradio.themes.utils import colors, fonts, sizes
 from gradio.themes.base import Base
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-
-# Importar módulos personalizados
-from safety_calculator import calculate_lookahead_distance
-from detr.image_processing import preprocess_image, plot_detr_results_with_distance
-from detr.model_detr import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
-from yolov11.model_yolo import load_yolov11_model
-from yolov11.image_processing_yolo import draw_yolo_results
-from metrics.IoU import calculate_iou, inter_model_agreement, save_metrics_to_file
+from PIL import Image
 
 # Añadir directorios al path
 sys.path.extend([
-    os.path.join(os.path.dirname(__file__), 'stereo', 'NMRF'),
-    os.path.join(os.path.dirname(__file__), 'stereo', 'NMRF', 'ops', 'setup', 'MultiScaleDeformableAttention')
+    os.path.join(os.path.dirname(__file__), 'stereo_estimation', 'NMRF'),
+    os.path.join(os.path.dirname(__file__), 'stereo_estimation', 'NMRF', 'ops', 'setup', 'MultiScaleDeformableAttention')
 ])
 
-from stereo.NMRF.disparity_inference import run_inference
-from stereo.NMRF.nmrf.utils.frame_utils import readDepthVKITTI, writeDispKITTI
-
+# Importar módulos personalizados
+from safety_calculator import calculate_lookahead_distance
+from detr.image_processing import preprocess_image
+from detr.model_detr import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
+from yolov11.model_yolo import load_yolov11_model
+from stereo_estimation.NMRF.disparity_inference import run_inference
 
 """
 Función main para la interfaz de Gradio.
@@ -219,7 +215,7 @@ detr_model = load_detr_model()
 
 # Cargar el modelo YOLOv11
 yolo_model_path = "./yolov11/model/yolo11s.pt"
-yolov11_model = load_yolov11_model(yolo_model_path)  # Carga el modelo YOLOv11
+yolov11_model = load_yolov11_model(yolo_model_path) 
 
 # Variable para el modelo seleccionado
 selected_model = "DETR"  # Esto se actualizará según la selección del usuario
@@ -257,7 +253,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     image_path_left_original = image_path_left 
     dataset_name = "kitti" 
     output = "./outputs/disparity_results" # Carpeta de salida para los resultados
-    resume_path = "./stereo/NMRF/pretrained/sceneflow.pth" # Ruta del modelo pre-entrenado con sceneflow.pth
+    resume_path = "./stereo_estimation/NMRF/pretrained/sceneflow.pth" # Ruta del modelo pre-entrenado con sceneflow.pth
 
     # Crear una lista con las imágenes de entrada proporcionadas por el usuario
     image_list = [(image_path_left, image_path_right)]
@@ -280,12 +276,26 @@ def stereo_inference(image_path_left=None, image_path_right=None):
 
         print(f"Disparity prediction saved at: {disp_pred_path}")
 
+        print(f"Rangos minimo y maximo del disp_pred: {disp_preds[0].min()}, {disp_preds[0].max()}")
+
+        # Mostrar la imagen de disparidad con un colorbar
+        disparity_image = cv2.imread(stereo_output_image, cv2.IMREAD_GRAYSCALE)
+        plt.figure(figsize=(10, 5))
+        plt.imshow(disparity_image)
+        plt.colorbar(label='Disparity (pixels)')
+        plt.axis('off')
+
+        # Guardar la imagen con el colorbar
+        disparity_with_colorbar_path = stereo_output_image.replace(".png", "_with_colorbar.png")
+        plt.savefig(disparity_with_colorbar_path, bbox_inches='tight', pad_inches=0)
+        plt.close()
+
         return gr.update(value=stereo_output_image, visible=True)
 
     # En caso de que no se encuentre un archivo, lanzar un error
     raise FileNotFoundError("No generated image was found in the results folder.")
 
-def generate_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.532725):
+def generate_depth_map(disparity_path=None, focal_length=721.5377, baseline=0.54):
     """
     Genera un mapa de profundidad con una barra de colores en el rango de metros 0-100.
     """
@@ -297,11 +307,17 @@ def generate_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.53
     # Usar la matriz de disparidad global si no se proporciona una ruta
     disparity = stereo_output_pred
 
+    disparity = disparity.astype(np.float32) / 256.0
+
+    # Ajustar el rango de disparidad a 2-192 
+    disparity = np.clip(disparity, a_min=2, a_max=192)
+
+    print(f"Valor minimo y maximo despues de dividir en 256",disparity.min(), disparity.max())
     # Convertir a float32 para cálculos precisos
     # disparity = disparity.astype(np.float32)
 
     # Evitar divisiones por cero y valores muy pequeños
-    min_disparity = 0.1
+    min_disparity = 1e-8
     disparity[disparity < min_disparity] = min_disparity
 
     # Calcular el mapa de profundidad
@@ -313,7 +329,7 @@ def generate_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.53
 
     # Crear figura con barra de colores
     fig, ax = plt.subplots(figsize=(10, 5), dpi=300, frameon=False)
-    im = ax.imshow(depth_map, cmap='inferno_r', vmin=0, vmax=100)
+    im = ax.imshow(depth_map, cmap='inferno_r')
     
     cbar = fig.colorbar(im, ax=ax, orientation='horizontal', label='Depth (meters)')
     cbar.ax.xaxis.label.set_color('white')
@@ -347,7 +363,7 @@ def generate_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.53
 
     return output_path_with_colorbar
 
-def only_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.532725):
+def only_depth_map(disparity_path=None, focal_length=721.5377, baseline=0.54):
     """
     Genera un mapa de profundidad a partir de un mapa de disparidad.
     """
@@ -358,26 +374,37 @@ def only_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.532725
 
     # Usar la matriz de disparidad global si no se proporciona una ruta
     disparity = stereo_output_pred
+
+    print(f"Valores minimos y maximos en la funcion only_depth_map", disparity.min(), disparity.max())
     
     # Convertir a float32 para cálculos precisos
     # disparity = disparity.astype(np.float32)
     
     # Evitar divisiones por cero y valores muy pequeños
-    min_disparity = 0.1
+    min_disparity = 1e-8
     disparity[disparity < min_disparity] = min_disparity
+    
+    disparity = disparity.astype(np.float32) / 256.0
+
+    disparity = np.clip(disparity, a_min=2, a_max=192)
 
     # Calcular el mapa de profundidad
     depth_map = (focal_length * baseline) / disparity
+
+    print(f"Valores minimos y maximos del depth map", depth_map.min(), depth_map.max())
+    print(f"Forma del depth map ",depth_map.shape, depth_map.dtype)
 
     # Aplicar límites razonables a la profundidad
     # depth_map[depth_map > 100] = 100  # Limitar a 100 metros
     # depth_map[depth_map < 0] = 0 
 
-    print(depth_map.shape, depth_map.dtype)
-
     # Guardar el mapa de profundidad como imagen
     output_path = "./outputs/depth.png"
-    plt.imsave(output_path, depth_map, cmap="inferno_r", vmin=0, vmax=100)
+    save_depth_map = np.round(depth_map * 256).astype(np.uint16)
+    
+    Image.fromarray(save_depth_map, mode='I;16').save(output_path)
+
+    # plt.imsave(output_path, depth_map, cmap="inferno_r")
 
     return depth_map, output_path
 
@@ -423,14 +450,6 @@ def object_detection_with_disparity(selected_model_name):
         yolo_bboxes = [box.xyxy[0].tolist() for box in results[0].boxes]
     else:
         return None, gr.Warning("Invalid model selected.")
-    
-
-    # Calcular la intersección sobre la unión (IoU) entre las detecciones de DETR y YOLOv11
-    if len(detr_bboxes) > 0 and len(yolo_bboxes) > 0:
-        metrics = inter_model_agreement(detr_bboxes, yolo_bboxes) # Calcular metricas de IoU
-        save_metrics_to_file(metrics)  # Guardar las métricas en un archivo .txt
-        print(f"Inter-model agreement metrics saved successfully: {metrics}")
-
 
     # Procesar información de objetos detectados
     objects_info = []
@@ -454,11 +473,11 @@ def object_detection_with_disparity(selected_model_name):
 
         # Calcular distancia media en región válida
         if len(bbox_valid) > 0:
-            median_distance = np.median(bbox_valid) # Ya esta el escalado de 0-100 metros
+            median_distance = np.median(bbox_valid)
         else:
             median_distance = float('inf')
 
-        # Agregar información del objeto detectado (sin ordenar todavía)
+        # Agregar información del objeto detectado oerdenado 
         objects_info.append({
             'id': idx,
             'class': class_names[label],
@@ -748,7 +767,7 @@ with gr.Blocks(theme=seafoam) as demo:
 
         .title-text span {
             font-family: 'Poppins', sans-serif; /* Cambia la fuente a Poppins */
-            font-size: 2.0vw; /* Escala adaptativa según el ancho de la pantalla */
+            font-size: 36px; /* Tamaño de fuente fijo */
             font-weight: 500; /* Peso de la fuente */
             color: #333; /* Cambia el color del texto si lo necesitas */
             text-align: center;
@@ -761,7 +780,7 @@ with gr.Blocks(theme=seafoam) as demo:
 
         @media (max-width: 768px) {
             .title-text span {
-                font-size: 2.5vw; /* Reduce la fuente en pantallas medianas */
+                font-size: 20px; /* Ajusta el tamaño de la fuente en pantallas medianas */
             }
             .title-text img {
                 width: 35px; /* Ajusta el tamaño del ícono */
@@ -770,7 +789,7 @@ with gr.Blocks(theme=seafoam) as demo:
 
         @media (max-width: 480px) {
             .title-text span {
-                font-size: 3.5vw; /* Reduce aún más la fuente en móviles */
+                font-size: 16px; /* Ajusta el tamaño de la fuente en móviles */
             }
             .title-text img {
                 width: 30px; /* Ajusta el tamaño del ícono */
@@ -865,10 +884,10 @@ with gr.Blocks(theme=seafoam) as demo:
         
         examples = gr.Examples(
             examples=[
-            ["./stereo_images/kitti_images_left/000161_10.png", "./stereo_images/kitti_images_right/000161_10.png"],
-            ["./stereo_images/kitti_images_left/000020_10.png", "./stereo_images/kitti_images_right/000020_10.png"],
-            ["./stereo_images/kitti_images_left/000004_10.png", "./stereo_images/kitti_images_right/000004_10.png"],
-            ["./stereo_images/kitti_images_left/000013_10.png", "./stereo_images/kitti_images_right/000013_10.png"]
+            ["./images/stereo_images/kitti_images_left/000013_10.png", "./images/stereo_images/kitti_images_right/000013_10.png"],
+            ["./images/stereo_images/kitti_images_left/0000000030.png", "./images/stereo_images/kitti_images_right/0000000030.png"],
+            ["./images/stereo_images/kitti_images_left/0000000045.png", "./images/stereo_images/kitti_images_right/0000000045.png"],
+            ["./images/stereo_images/kitti_images_left/0000000060.png", "./images/stereo_images/kitti_images_right/0000000060.png"]
             ],
             inputs=[image_path_left, image_path_right]
         )

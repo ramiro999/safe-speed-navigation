@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from torchvision import transforms as T
 from detr.model_detr import COCO_INSTANCE_CATEGORY_NAMES
+import cv2
 
 # Generar colores aleatorios para las categorías
 COLORS = np.random.rand(len(COCO_INSTANCE_CATEGORY_NAMES), 3)
@@ -27,66 +28,43 @@ def preprocess_image(image_input):
     image_tensor = transform(image).unsqueeze(0)
     return image, image_tensor
 
-def plot_detr_results(image, bboxes, labels, ids):
+def plot_detr_results(image, bboxes, labels):
     """
     Renderiza los resultados de detección con bounding boxes, IDs y nombres de las categorías.
-
-    Args:
-        image: Imagen de entrada en formato PIL.
-        bboxes: Lista de bounding boxes normalizados ([cx, cy, w, h]).
-        labels: Lista de etiquetas de categorías detectadas.
-        ids: Lista de IDs únicos de los objetos detectados.
-
-    Returns:
-        fig: Figura de Matplotlib con los resultados renderizados.
     """
-    fig, ax = plt.subplots(figsize=(12, 8))
-    ax.imshow(image)
 
-    for bbox, label, obj_id in zip(bboxes, labels, ids):
+    if isinstance(image, str):
+        image = Image.open(image) # Cargar imagen si es una ruta
+
+    if isinstance(image, Image.Image):
+        image = np.array(image)
+
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+    for bbox, label in zip(bboxes, labels):
+        # Filtrar etiquetas inválidas
+        if label >= len(COCO_INSTANCE_CATEGORY_NAMES):
+            print(f"⚠️ Advertencia: Se encontró un label fuera de rango ({label}), será ignorado.")
+            continue
+
         cx, cy, w, h = bbox
-        x0, y0 = (cx - w / 2) * image.width, (cy - h / 2) * image.height
-        x1, y1 = (cx + w / 2) * image.width, (cy + h / 2) * image.height
+        x0, y0 = int((cx - w / 2) * image.shape[1]), int((cy - h / 2) * image.shape[0])
+        x1, y1 = int((cx + w / 2) * image.shape[1]), int((cy + h / 2) * image.shape[0])
 
         # Calcular el color para la categoría
-        color = COLORS[label]
+        color = (int(COLORS[label][0] * 255), int(COLORS[label][1] * 255), int(COLORS[label][2] * 255))
 
         # Dibujar el bounding box
-        rect = plt.Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor=color, linewidth=2)
-        ax.add_patch(rect)
+        cv2.rectangle(image, (x0, y0), (x1, y1), color, 2)
 
         # Mostrar ID del objeto y nombre de la categoría
-        ax.text(x0, y0 - 10, f"ID: {obj_id}, {COCO_INSTANCE_CATEGORY_NAMES[label]}", fontsize=12, color='white',
-                bbox=dict(facecolor=color, alpha=0.7))
+        cv2.putText(image, f"category: {COCO_INSTANCE_CATEGORY_NAMES[label]}", (x0, y0 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2, cv2.LINE_AA)
 
-    ax.axis('off')  # Ocultar ejes
-    return fig
+    # Mostrar imagen con openCV
+    cv2.imshow('DETR', image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-def plot_detr_results_with_distance(image, bboxes, labels, ids, distances):
-    """
-    Renderiza los resultados de detección con bounding boxes, IDs, nombres de las categorías y distancias.
-    """
-    fig, ax = plt.subplots(figsize=(12, 8))
-    ax.imshow(image)
+    return image
 
-    height, width = image.shape[:2] if isinstance(image, np.ndarray) else (image.height, image.width)
-
-    for bbox, label, obj_id, distance in zip(bboxes, labels, ids, distances):
-        cx, cy, w, h = bbox
-        x0, y0 = (cx - w / 2) * width, (cy - h / 2) * height
-        x1, y1 = (cx + w / 2) * width, (cy + h / 2) * height
-
-        # Calcular el color para la categoría
-        color = COLORS[label]
-
-        # Dibujar el bounding box
-        rect = plt.Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor=color, linewidth=2)
-        ax.add_patch(rect)
-
-        # Dibujar el ID del objeto, el nombre de la categoría y la distancia
-        category_name = COCO_INSTANCE_CATEGORY_NAMES[label]
-        ax.text(x0, y0, f'ID:{obj_id} - {category_name} - ({distance:.2f}m)', bbox=dict(facecolor=color, alpha=0.5), fontsize=12, color='white')
-
-    plt.axis('off')
-    plt.tight_layout()
-    return fig

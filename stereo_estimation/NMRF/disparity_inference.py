@@ -88,6 +88,7 @@ def run_on_dataset(dataset, model, output, find_output_path=None, show_attr="dis
             visualized_output = viz.draw_error_map(error)
         elif show_attr == "disparity":
             disp_pred = result_dict["disp"][0].cpu() # Guardar en una matriz de numpy y pasarla como output
+            disp_pred_uint16 = np.round(disp_pred.numpy() * 256).astype(np.uint16)
             #dis_pred es un tensor de torch, se debe convertir a numpy para guardarlo
             visualized_output = viz.draw_disparity(disp_pred, colormap="kitti") # Esta es para visualizacion, no para procesar
         else:
@@ -100,7 +101,7 @@ def run_on_dataset(dataset, model, output, find_output_path=None, show_attr="dis
             dirname = os.path.dirname(output_path)
             os.makedirs(dirname, exist_ok=True)
             # Guardar disp_pred como archivo .npy
-            np.save(output_path.replace('.png', '.npy'), disp_pred.numpy())
+            np.save(output_path.replace('.png', '.npy'), disp_pred_uint16)
             # Guardar visualized_output como imagen
             visualized_output.save(output_path)
         
@@ -110,7 +111,7 @@ def run_on_dataset(dataset, model, output, find_output_path=None, show_attr="dis
             if cv2.waitKey(0) == 27:
                 break  # esc to quit
         
-        disp_preds.append(disp_pred.numpy())
+        disp_preds.append(disp_pred_uint16)
 
     return disp_preds
 

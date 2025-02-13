@@ -1,23 +1,26 @@
+# Librerias requeridas
 import torch
 from PIL import Image
 import torchvision.transforms as transforms
 import numpy as np
 
+# Clase para evaluar métricas
 class MetricEvaluator:
     def __init__(self, metrics):
-        self.metrics_fn = {metric: globals()[metric] for metric in metrics}
+        self.metrics_fn = {metric: globals()[metric] for metric in metrics} 
         self.results = {metric: 0.0 for metric in metrics}
 
     def evaluate_metrics(self, pred, groundtruth):
         """Calcula las métricas de error entre la predicción y el ground truth."""
+
         # Convertir tensores a NumPy
         pred = pred.squeeze().numpy()  # Quitar dimensiones extra
         groundtruth = groundtruth.squeeze().numpy()
 
-        # Crear máscara para valores válidos
-        valid_mask = (groundtruth > 1e-8) & (pred > 1e-8)
+        # Máscara para valores válidos
+        valid_mask = (groundtruth > 1e-8)
 
-        # Aplicar la máscara
+        # Aplicar la máscara para valores válidos
         pred_valid = pred[valid_mask]
         groundtruth_valid = groundtruth[valid_mask]
 
@@ -30,7 +33,7 @@ class MetricEvaluator:
         groundtruth_km = groundtruth_valid / 1000.0
 
         # Calcular el inverso en 1/km
-        pred_inv_km = 1.0 / (pred_km + 1e-8)
+        pred_inv_km = 1.0 / (pred_km + 1e-8) 
         groundtruth_inv_km = 1.0 / (groundtruth_km + 1e-8)
 
         # Calcular métricas
@@ -59,27 +62,29 @@ def irmse_metric(pred_inv_km, groundtruth_inv_km):
 def load_image_as_tensor(image_path):
     """Carga una imagen de profundidad y la convierte en un tensor de PyTorch con la conversión adecuada."""
 
-    # Cargar la imagen como escala de grises
-    image = Image.open(image_path).convert('L')
+    # Cargar la imagen
+    image = Image.open(image_path)
 
     # Convertir a numpy array
-    image_array = np.array(image, dtype=np.uint8)  # Cargar como uint8
+    image_array = np.array(image, dtype=np.uint16) / 256.0 
+    # print(f"Min: {image_array.min()}, Max: {image_array.max()}")
 
     # Convertir a uint16 (escalado de 8-bit a 16-bit)
-    image_uint16 = image_array.astype(np.uint16) * 256
+    # image_uint16 = image_array.astype(np.uint16) * 256
 
     # Convertir a tensor de PyTorch
-    tensor = torch.tensor(image_uint16, dtype=torch.uint16)
+    tensor = torch.tensor(image_array, dtype=torch.float32)
+    # print(f"Min: {tensor.min().item()}, Max: {tensor.max().item()}")
 
     # Convertir a float dividiendo entre 256 para obtener metros
-    tensor = tensor.float() / 256.0
+    # tensor = tensor.float() / 256.0
     
     return tensor  # Agregar dimensión de canal
 
 # Ejemplo de uso
 if __name__ == "__main__":
     pred_image_path = "../outputs/depth.png"
-    groundtruth_image_path = "../ground_truth/depth_maps/0000000005.png"
+    groundtruth_image_path = "../ground_truth/depth_maps/0000000045.png"
 
     # Cargar las imágenes como tensores
     pred_tensor = load_image_as_tensor(pred_image_path)
