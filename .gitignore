@@ -3,6 +3,9 @@ __pycache__/
 
 resultados_kitti/
 stereo_images/
+ground_truth/
+outputs/
+
 
 
 stereo/NMRF/.idea/

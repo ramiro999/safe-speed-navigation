@@ -16,6 +16,8 @@ from gradio.themes.base import Base
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from PIL import Image
+from glob import glob
+import shutil
 
 # Añadir directorios al path
 sys.path.extend([
@@ -226,13 +228,25 @@ stereo_output_pred = None
 image_path_left_original = None
 objects_info = []  # Almacenar los objetos detectados en la imagen
 
-def save_temp_image(image_array):
+def save_temp_image(image_array, output_name=None, start_number=5):
     """
     Guarda una imagen numpy.ndarray en un archivo temporal y devuelve la ruta del archivo.
     """
     temp_dir = tempfile.gettempdir()
-    temp_file_path = os.path.join(temp_dir, f"image_{len(os.listdir(temp_dir)) + 1:02d}.png")
+
+    if not hasattr(save_temp_image, "counter"):
+        # Buscar el número más alto en la carpeta temporal
+        existing_files = [f for f in os.listdir(temp_dir) if f.endswith(".png") and f.isdigit()]
+        existing_numbers = [int(f) for f in existing_files] if existing_files else []
+        save_temp_image.counter = max(existing_numbers, default=start_number - 1) + 1  # Continuar numeración
+
+    if output_name is None:
+        output_name = f"{save_temp_image.counter:010d}.png"
+
+    temp_file_path = os.path.join(temp_dir, output_name)
     cv2.imwrite(temp_file_path, image_array)
+
+    save_temp_image.counter += 1  # Aumentar el contador correctamente
     return temp_file_path
 
 def stereo_inference(image_path_left=None, image_path_right=None):
@@ -253,7 +267,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     image_path_left_original = image_path_left 
     dataset_name = "kitti" 
     output = "./outputs/disparity_results" # Carpeta de salida para los resultados
-    resume_path = "./stereo_estimation/NMRF/pretrained/sceneflow.pth" # Ruta del modelo pre-entrenado con sceneflow.pth
+    resume_path = "./stereo_estimation/NMRF/pretrained/kitti.pth" # Ruta del modelo pre-entrenado con kitti.pth
 
     # Crear una lista con las imágenes de entrada proporcionadas por el usuario
     image_list = [(image_path_left, image_path_right)]
@@ -286,8 +300,8 @@ def stereo_inference(image_path_left=None, image_path_right=None):
         plt.axis('off')
 
         # Guardar la imagen con el colorbar
-        disparity_with_colorbar_path = stereo_output_image.replace(".png", "_with_colorbar.png")
-        plt.savefig(disparity_with_colorbar_path, bbox_inches='tight', pad_inches=0)
+        #disparity_with_colorbar_path = stereo_output_image.replace(".png", "_with_colorbar.png")
+        #plt.savefig(disparity_with_colorbar_path, bbox_inches='tight', pad_inches=0)
         plt.close()
 
         return gr.update(value=stereo_output_image, visible=True)
@@ -295,7 +309,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     # En caso de que no se encuentre un archivo, lanzar un error
     raise FileNotFoundError("No generated image was found in the results folder.")
 
-def generate_depth_map(disparity_path=None, focal_length=721.5377, baseline=0.54):
+def generate_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.532725):
     """
     Genera un mapa de profundidad con una barra de colores en el rango de metros 0-100.
     """
@@ -307,12 +321,14 @@ def generate_depth_map(disparity_path=None, focal_length=721.5377, baseline=0.54
     # Usar la matriz de disparidad global si no se proporciona una ruta
     disparity = stereo_output_pred
 
-    disparity = disparity.astype(np.float32) / 256.0
+    #disparity = disparity.astype(np.float32) / 256.0
+
+    #print(f"Valor minimo y maximo despues de dividir en 256 en la funcion generate depth map",disparity.min(), disparity.max())
 
     # Ajustar el rango de disparidad a 2-192 
-    disparity = np.clip(disparity, a_min=2, a_max=192)
+    #disparity = np.clip(disparity, a_min=2, a_max=192)
 
-    print(f"Valor minimo y maximo despues de dividir en 256",disparity.min(), disparity.max())
+    #print(f"Valor minimo y maximo despues de usar np.clip en la funcion generate depth map",disparity.min(), disparity.max())
     # Convertir a float32 para cálculos precisos
     # disparity = disparity.astype(np.float32)
 
@@ -322,6 +338,13 @@ def generate_depth_map(disparity_path=None, focal_length=721.5377, baseline=0.54
 
     # Calcular el mapa de profundidad
     depth_map = (focal_length * baseline) / disparity
+
+    depth_map = np.round(depth_map.numpy() * 256).astype(np.uint16)
+
+    depth_map = depth_map.astype(np.float32) / 256.0
+
+
+    print(f"Valor minimo y maximo del depth map en la funcion generate depth map",depth_map.min(), depth_map.max())
 
     # Aplicar límites razonables a la profundidad en metros
     # depth_map[depth_map > 100] = 100
@@ -363,50 +386,133 @@ def generate_depth_map(disparity_path=None, focal_length=721.5377, baseline=0.54
 
     return output_path_with_colorbar
 
-def only_depth_map(disparity_path=None, focal_length=721.5377, baseline=0.54):
+def only_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.532725, input_image_path=None):
     """
     Genera un mapa de profundidad a partir de un mapa de disparidad.
-    """
-    global stereo_output_pred
 
-    if stereo_output_pred is None:
+    Args:
+        disparity_path (str, opcional): Ruta al archivo de disparidad (.npy).
+        focal_length (float): Longitud focal de la cámara.
+        baseline (float): Línea base (distancia entre las cámaras).
+        input_image_path (str, opcional): Ruta de la imagen de entrada para usar su nombre.
+
+    Returns:
+        tuple: (depth_map, output_path) donde depth_map es el mapa de profundidad y output_path es la ruta del archivo guardado.
+    """
+    global stereo_output_pred, stereo_output_image
+
+    if stereo_output_pred is None or stereo_output_image is None:
         raise ValueError("No disparity data available.")
 
     # Usar la matriz de disparidad global si no se proporciona una ruta
     disparity = stereo_output_pred
 
-    print(f"Valores minimos y maximos en la funcion only_depth_map", disparity.min(), disparity.max())
-    
-    # Convertir a float32 para cálculos precisos
-    # disparity = disparity.astype(np.float32)
-    
+    print(f"Valores mínimos y máximos en la función only_depth_map: {disparity.min()}, {disparity.max()}, {disparity.shape}, {disparity.dtype}")
+
     # Evitar divisiones por cero y valores muy pequeños
     min_disparity = 1e-8
     disparity[disparity < min_disparity] = min_disparity
-    
-    disparity = disparity.astype(np.float32) / 256.0
-
-    disparity = np.clip(disparity, a_min=2, a_max=192)
 
     # Calcular el mapa de profundidad
     depth_map = (focal_length * baseline) / disparity
 
-    print(f"Valores minimos y maximos del depth map", depth_map.min(), depth_map.max())
-    print(f"Forma del depth map ",depth_map.shape, depth_map.dtype)
+    print(f"Valores mínimos y máximos del depth map en la función only_depth_map: {depth_map.min()}, {depth_map.max()}")
+    print(f"Forma del depth map en la función only_depth_map: {depth_map.shape}, {depth_map.dtype}")
 
-    # Aplicar límites razonables a la profundidad
-    # depth_map[depth_map > 100] = 100  # Limitar a 100 metros
-    # depth_map[depth_map < 0] = 0 
+    base_name = os.path.splitext(os.path.basename(stereo_output_image))[0]
+    output_name = f"{base_name}.png"
 
-    # Guardar el mapa de profundidad como imagen
-    output_path = "./outputs/depth.png"
-    save_depth_map = np.round(depth_map * 256).astype(np.uint16)
-    
+    # Ruta de salida
+    output_dir = "./outputs/depth_results"
+    output_path = os.path.join(output_dir, output_name)
+
+    # Guardar el mapa de profundidad como imagen en uint16
+    save_depth_map = np.round(depth_map.numpy() * 256).astype(np.uint16)
     Image.fromarray(save_depth_map, mode='I;16').save(output_path)
 
-    # plt.imsave(output_path, depth_map, cmap="inferno_r")
+    print(f"Mapa de profundidad guardado en: {output_path}")
 
     return depth_map, output_path
+
+def clear_folder(folder_path):
+    """
+    Borra todos los archivos dentro de una carpeta.
+    """
+    if os.path.exists(folder_path):
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)  # Borra archivos y enlaces simbólicos
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)  # Borra carpetas completas
+            except Exception as e:
+                print(f"❌ Error al borrar {file_path}: {e}")
+
+# Función para procesar todas las imágenes en una carpeta (Disparidad)
+def process_stereo_images(left_images, right_images, disparity_output_folder):
+    os.makedirs(disparity_output_folder, exist_ok=True)
+
+    clear_folder(disparity_output_folder)
+
+    if len(left_images) != len(right_images):
+        return gr.Warning("El número de imágenes izquierda y derecha no coincide.")
+
+    processed_images = []
+    for left, right in zip(left_images, right_images):
+        # Obtener nombre base
+        base_name = os.path.basename(left.name)
+
+        # Ejecutar inferencia estéreo
+        stereo_inference(left.name, right.name)
+
+        # Guardar imagen de disparidad generada
+        output_path = os.path.join(disparity_output_folder, base_name)
+        cv2.imwrite(output_path, cv2.imread(stereo_output_image))
+        processed_images.append(output_path)
+
+    return processed_images[0]  # Solo muestra la primera imagen
+
+
+def process_depth_images(disparity_npy_files, depth_output_folder, focal_length=725.0087, baseline=0.532725):
+    """
+    Procesa todas las matrices de disparidad en formato `.npy` y genera mapas de profundidad.
+    """
+    os.makedirs(depth_output_folder, exist_ok=True)
+
+    clear_folder(depth_output_folder)
+
+    processed_images = []
+    for disparity_npy in disparity_npy_files:
+        base_name = os.path.basename(disparity_npy.name).replace(".npy", ".png")
+
+        # 🔹 Cargar el archivo `.npy`
+        try:
+            disparity = np.load(disparity_npy.name)
+        except Exception as e:
+            print(f"❌ Error cargando {disparity_npy.name}: {e}")
+            continue
+
+        if disparity is None or disparity.size == 0:
+            print(f"❌ Error: Archivo vacío o no válido {disparity_npy.name}")
+            continue
+
+        # 🔹 Evitar división por cero
+        min_disparity = 1e-8
+        disparity[disparity < min_disparity] = min_disparity
+
+        # 🔹 Calcular el mapa de profundidad
+        depth_map = (focal_length * baseline) / disparity
+
+        # 🔹 Convertir a uint16 para guardar correctamente
+        save_depth_map = np.round(depth_map * 256).astype(np.uint16)
+        output_path = os.path.join(depth_output_folder, base_name)
+        Image.fromarray(save_depth_map, mode='I;16').save(output_path)
+
+        print(f"✅ Mapa de profundidad guardado en: {output_path}")
+        processed_images.append(output_path)
+
+    return processed_images[0] if processed_images else gr.Warning("❌ No se generaron mapas de profundidad.")
 
 
 # Función para detección de objetos y calcular la distancia usando la disparidad
@@ -609,7 +715,7 @@ def object_detection_with_disparity(selected_model_name):
     )
 
     # Guardar el gráfico como imagen
-    fig.write_image("./outputs/object_detection_results_with_distances.png")
+    fig.write_image("./outputs/object_detection/object_detection_results_with_distances.png")
 
     return fig, cards_html
 
@@ -874,6 +980,35 @@ with gr.Blocks(theme=seafoam) as demo:
         </style>
         <p style="text-align: center;">Upload a pair of stereo images or choose the Example Stereo Images below, to perform stereo inference and generate the disparity map.</p>
         """)
+
+        with gr.Tab("Generar Disparidad"):
+            left_images = gr.File(label="Cargar imágenes izquierda", file_count="directory")
+            right_images = gr.File(label="Cargar imágenes derecha", file_count="directory")
+            disparity_output_folder = gr.Textbox(value="./outputs/disparity_results", label="Carpeta de salida para disparidad")
+
+            disparity_button = gr.Button("Generar Mapas de Disparidad")
+            disparity_output_image = gr.Image(label="Ejemplo de Mapa de Disparidad Generado")
+
+            disparity_button.click(
+                process_stereo_images,
+                inputs=[left_images, right_images, disparity_output_folder],
+                outputs=disparity_output_image
+            )
+
+        with gr.Tab("Generar Profundidad"):
+            disparity_images = gr.File(label="Cargar mapas de disparidad", file_count="directory")
+            depth_output_folder = gr.Textbox(value="./outputs/depth_results", label="Carpeta de salida para profundidad")
+
+            depth_button = gr.Button("Generar Mapas de Profundidad")
+            depth_output_image = gr.Image(label="Ejemplo de Mapa de Profundidad Generado")
+
+            depth_button.click(
+                process_depth_images,
+                inputs=[disparity_images, depth_output_folder],
+                outputs=depth_output_image
+            )
+
+        #demo.launch(share=True)
 
         with gr.Row():
             image_path_left = gr.Image(label="Left Image")
