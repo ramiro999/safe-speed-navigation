@@ -5,8 +5,8 @@ resultados_kitti/
 stereo_images/
 ground_truth/
 outputs/
-
-
+labels/
+images/
 
 stereo/NMRF/.idea/
 stereo/NMRF/.vscode/
