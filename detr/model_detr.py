@@ -3,7 +3,7 @@ import torch
 
 # Cargar el modelo DETR preentrenado
 def load_detr_model():
-    model = torch.hub.load('facebookresearch/detr', 'detr_resnet50', pretrained=True)
+    model = torch.hub.load('facebookresearch/detr', 'detr_resnet101', pretrained=True)
     model.eval()
     return model
 

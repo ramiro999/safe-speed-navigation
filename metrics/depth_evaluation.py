@@ -101,8 +101,8 @@ def process_images(pred_dir, gt_dir, output_csv):
 
 # Ruta de carpetas
 pred_dir = "../outputs/depth_results"  # Carpeta con imágenes de predicción
-gt_dir = "../ground_truth/depth_maps/kitti_2015/train/person"  # Carpeta con ground truths
-output_csv = "metric_results_train.csv"
+gt_dir = "../ground_truth/depth_maps/driving_stereo/test-data"  # Carpeta con ground truths
+output_csv = "metric_results_test.csv"
 
 # Ejecutar procesamiento
 if __name__ == "__main__":

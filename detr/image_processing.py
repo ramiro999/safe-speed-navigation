@@ -7,8 +7,8 @@ from torchvision import transforms as T
 from detr.model_detr import COCO_INSTANCE_CATEGORY_NAMES
 import cv2
 
-# Generar colores aleatorios para las categorías
-COLORS = np.random.rand(len(COCO_INSTANCE_CATEGORY_NAMES), 3)
+# Generar colores aleatorios para cada categoría
+COLORS = np.random.rand(len(COCO_INSTANCE_CATEGORY_NAMES), 3) * 255
 
 # Transformación para las imágenes de entrada
 transform = T.Compose([
@@ -34,34 +34,42 @@ def plot_detr_results(image, bboxes, labels):
     """
 
     if isinstance(image, str):
-        image = Image.open(image) # Cargar imagen si es una ruta
+        image = Image.open(image)  # Cargar imagen si es una ruta
 
     if isinstance(image, Image.Image):
         image = np.array(image)
 
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    # Asegurar que la imagen está en RGB antes de OpenCV
+    if image.shape[-1] == 3:  
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
+    # Si no hay detecciones, mostrar advertencia
+    if len(bboxes) == 0:
+        print("⚠️ Advertencia: No hay detecciones para dibujar.")
+        cv2.imshow('DETR', image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        return image
+
+    # Convertir bounding boxes a coordenadas absolutas
     for bbox, label in zip(bboxes, labels):
-        # Filtrar etiquetas inválidas
         if label >= len(COCO_INSTANCE_CATEGORY_NAMES):
             print(f"⚠️ Advertencia: Se encontró un label fuera de rango ({label}), será ignorado.")
             continue
 
-        cx, cy, w, h = bbox
-        x0, y0 = int((cx - w / 2) * image.shape[1]), int((cy - h / 2) * image.shape[0])
-        x1, y1 = int((cx + w / 2) * image.shape[1]), int((cy + h / 2) * image.shape[0])
+        x0, y0, x1, y1 = map(int, bbox)  # Asegurar coordenadas en enteros
 
         # Calcular el color para la categoría
-        color = (int(COLORS[label][0] * 255), int(COLORS[label][1] * 255), int(COLORS[label][2] * 255))
+        color = (int(COLORS[label][0]), int(COLORS[label][1]), int(COLORS[label][2]))
 
-        # Dibujar el bounding box
+        # Dibujar la bounding box
         cv2.rectangle(image, (x0, y0), (x1, y1), color, 2)
 
         # Mostrar ID del objeto y nombre de la categoría
-        cv2.putText(image, f"category: {COCO_INSTANCE_CATEGORY_NAMES[label]}", (x0, y0 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2, cv2.LINE_AA)
+        cv2.putText(image, f"category: {COCO_INSTANCE_CATEGORY_NAMES[label]}", 
+                    (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2, cv2.LINE_AA)
 
-    # Mostrar imagen con openCV
+    # Mostrar imagen con OpenCV
     cv2.imshow('DETR', image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

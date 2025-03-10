@@ -105,7 +105,7 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
     gsd = (object_distance_mm * sensorSize) / (focalLength * imageHeight)  # Ground Sampling Distance (GSD) en centrimetros por pixel
 
-    hp = object_height * gsd  # Altura del objeto en centrimetros para eliminar la dependencia de mm/pixel
+    hp = object_height * gsd  # Altura del objeto en milimetros para eliminar la dependencia de mm/pixel
 
     hp = hp / 1000  # Altura del objeto en metros
 

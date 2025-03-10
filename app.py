@@ -18,6 +18,7 @@ import matplotlib.cm as cm
 from PIL import Image
 from glob import glob
 import shutil
+from gradio_modal import Modal
 
 # Añadir directorios al path
 sys.path.extend([
@@ -212,11 +213,12 @@ gr.HTML("""
 </style>
 """)
 
+
 # Cargar el modelo DETR
 detr_model = load_detr_model()
 
 # Cargar el modelo YOLOv11
-yolo_model_path = "./yolov11/model/yolo11s.pt"
+yolo_model_path = "./yolov11/yolov11n-kitti/train5/weights/best.pt"
 yolov11_model = load_yolov11_model(yolo_model_path) 
 
 # Variable para el modelo seleccionado
@@ -282,13 +284,9 @@ def stereo_inference(image_path_left=None, image_path_right=None):
         result_files.sort(key=os.path.getmtime, reverse=True)
         stereo_output_image = os.path.abspath(result_files[0])
 
-        # Guardar el disp_pred como archivo .npy
-        disp_pred_path = os.path.join(output, "disp_pred.npy")
-        np.save(disp_pred_path, disp_preds[0]) # Guardar el primer disp_pred
-
         stereo_output_pred = disp_preds[0]  # Guardar la matriz de disparidad en la variable global
 
-        print(f"Disparity prediction saved at: {disp_pred_path}")
+        #print(f"Disparity prediction saved at: {disp_pred_path}")
 
         print(f"Rangos minimo y maximo del disp_pred: {disp_preds[0].min()}, {disp_preds[0].max()}")
 
@@ -298,10 +296,6 @@ def stereo_inference(image_path_left=None, image_path_right=None):
         plt.imshow(disparity_image)
         plt.colorbar(label='Disparity (pixels)')
         plt.axis('off')
-
-        # Guardar la imagen con el colorbar
-        #disparity_with_colorbar_path = stereo_output_image.replace(".png", "_with_colorbar.png")
-        #plt.savefig(disparity_with_colorbar_path, bbox_inches='tight', pad_inches=0)
         plt.close()
 
         return gr.update(value=stereo_output_image, visible=True)
@@ -309,7 +303,7 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     # En caso de que no se encuentre un archivo, lanzar un error
     raise FileNotFoundError("No generated image was found in the results folder.")
 
-def generate_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.532725):
+def generate_depth_map(disparity_path=None, focal_length=2007.113, baseline=0.54):
     """
     Genera un mapa de profundidad con una barra de colores en el rango de metros 0-100.
     """
@@ -320,17 +314,6 @@ def generate_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.53
 
     # Usar la matriz de disparidad global si no se proporciona una ruta
     disparity = stereo_output_pred
-
-    #disparity = disparity.astype(np.float32) / 256.0
-
-    #print(f"Valor minimo y maximo despues de dividir en 256 en la funcion generate depth map",disparity.min(), disparity.max())
-
-    # Ajustar el rango de disparidad a 2-192 
-    #disparity = np.clip(disparity, a_min=2, a_max=192)
-
-    #print(f"Valor minimo y maximo despues de usar np.clip en la funcion generate depth map",disparity.min(), disparity.max())
-    # Convertir a float32 para cálculos precisos
-    # disparity = disparity.astype(np.float32)
 
     # Evitar divisiones por cero y valores muy pequeños
     min_disparity = 1e-8
@@ -345,10 +328,6 @@ def generate_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.53
 
 
     print(f"Valor minimo y maximo del depth map en la funcion generate depth map",depth_map.min(), depth_map.max())
-
-    # Aplicar límites razonables a la profundidad en metros
-    # depth_map[depth_map > 100] = 100
-    # depth_map[depth_map < 0] = 0
 
     # Crear figura con barra de colores
     fig, ax = plt.subplots(figsize=(10, 5), dpi=300, frameon=False)
@@ -386,7 +365,7 @@ def generate_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.53
 
     return output_path_with_colorbar
 
-def only_depth_map(disparity_path=None, focal_length=725.0087, baseline=0.532725, input_image_path=None):
+def only_depth_map(disparity_path=None, focal_length=2007.113, baseline=0.54, input_image_path=None):
     """
     Genera un mapa de profundidad a partir de un mapa de disparidad.
 
@@ -473,8 +452,7 @@ def process_stereo_images(left_images, right_images, disparity_output_folder):
 
     return processed_images[0]  # Solo muestra la primera imagen
 
-
-def process_depth_images(disparity_npy_files, depth_output_folder, focal_length=725.0087, baseline=0.532725):
+def process_depth_images(disparity_npy_files, depth_output_folder, focal_length=2007.113, baseline=0.532725):
     """
     Procesa todas las matrices de disparidad en formato `.npy` y genera mapas de profundidad.
     """
@@ -485,6 +463,11 @@ def process_depth_images(disparity_npy_files, depth_output_folder, focal_length=
     processed_images = []
     for disparity_npy in disparity_npy_files:
         base_name = os.path.basename(disparity_npy.name).replace(".npy", ".png")
+
+        # 🔹 Verificar que el archivo tenga extensión `.npy`
+        if not disparity_npy.name.endswith('.npy'):
+            print(f"❌ Error: Solo se permiten archivos .npy. Archivo no válido: {disparity_npy.name}")
+            continue
 
         # 🔹 Cargar el archivo `.npy`
         try:
@@ -513,7 +496,6 @@ def process_depth_images(disparity_npy_files, depth_output_folder, focal_length=
         processed_images.append(output_path)
 
     return processed_images[0] if processed_images else gr.Warning("❌ No se generaron mapas de profundidad.")
-
 
 # Función para detección de objetos y calcular la distancia usando la disparidad
 def object_detection_with_disparity(selected_model_name):
@@ -571,7 +553,9 @@ def object_detection_with_disparity(selected_model_name):
         elif selected_model_name == "YOLOv11":
             x0, y0, x1, y1 = map(int, bbox)
 
-        height_bb = abs(y1 - y0)
+        height_bb = abs(y1 - y0) # Poner cuanto vale en metros la altura de la caja delimitadora
+        # Crear funcion para calcular la altura en metros con los parametros que ya tenemos en safety_calculator.py
+        # Y llamar a la funcion para que height_bb retorne height en metros
 
         # Recortar región del mapa de profundidad correspondiente al bounding box
         bbox_depth = depth[y0:y1, x0:x1]
@@ -719,7 +703,6 @@ def object_detection_with_disparity(selected_model_name):
 
     return fig, cards_html
 
-
 # Función para el cálculo de distancia segura y gráficos de decisión
 def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object_id):
     global objects_info
@@ -798,8 +781,67 @@ class Seafoam(Base):
 
 seafoam = Seafoam()
 
-# Interfaz de Gradio con pestañas
 with gr.Blocks(theme=seafoam) as demo:
+    
+    with Modal(visible=True) as modal:
+        gr.HTML("""
+        <div style="
+            animation: slideUpFadeIn 0.6s ease-out;
+            background-color: #f0f8ff;
+            color:rgb(102, 131, 159);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 12px 35px rgba(17, 50, 199, 0.3);
+            text-align: left;
+            border-left: 6px solid #0e3a67;
+            font-family: 'Poppins', sans-serif;
+        ">  
+        
+            <div style="text-align: center; display: flex; justify-content: center; align-items: center; gap: 10px;">
+            <img src="https://i.ibb.co/VLwzcq2/logo.png" alt="Icon" style="width: 50px;">
+                <h1 style="margin: 0; font-size: 28px;">
+                    Welcome to <span style='color: #1abc9c;'>Safe Navigation Speed Estimation</span>
+                </h1>
+            <img src="https://i.ibb.co/VLwzcq2/logo.png" alt="Icon" style="width: 50px;">
+            </div>
+
+            <p style="font-size: 20px; margin-top: 15px;">
+                This application allows you to estimate the safe navigation speed for autonomous vehicles.
+            </p>
+
+            <ul style="font-size: 18px;">
+                <li>🖥️ Uses stereo images to generate disparity and depth maps.</li>
+                <li>🔍 Detects objects using advanced models like DETR and YOLOv11.</li>
+                <li>🚦 Calculates safe distances for braking or obstacle avoidance.</li>
+            </ul>
+
+            <p style="font-weight: bold; font-size: 18px; margin-top: 20px;">
+                👉 To get started, upload your stereo images or use the provided examples.
+            </p>
+
+            <!-- GIF animado -->
+            <div style="text-align: center; margin-top: 20px;">
+                <img src="https://i.ibb.co/8ncgdv39/Near-1-removebg-preview.png" alt="Near" style="width: 100%;">
+            </div>
+        </div>
+
+        <style>
+            @keyframes slideUpFadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+        </style>
+        """)
+
+
     gr.HTML("""
     <style>
         .title-text {
@@ -834,7 +876,7 @@ with gr.Blocks(theme=seafoam) as demo:
                 font-size: 18px;
             }
             .welcome-image {
-                width: 80%;
+                width: 80%;`
             }
             .gradio-tabs {
                 display: block;
@@ -908,7 +950,6 @@ with gr.Blocks(theme=seafoam) as demo:
         <img src="https://i.ibb.co/VLwzcq2/logo.png" alt="Icon">
     </div>
     """)
-
 
     with gr.Tab("Stereo Inference", elem_id="stereo-inference-tab"):
         gr.Markdown("## Stereo Inference", elem_id="stereo-inference-title")
@@ -1153,5 +1194,5 @@ with gr.Blocks(theme=seafoam) as demo:
             inputs=None,
             outputs=selected_object_ids,
         )
-    
+
 demo.launch(share=True)
