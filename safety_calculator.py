@@ -53,17 +53,14 @@ def set_plot_style(is_dark_mode=False):
             }
         }
 
-
-
-
 def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, object_height=None, object_distance=None, image_path=None):
     """
     Calcula las distancias de frenado y esquiva para un vehículo autónomo en función de los parámetros de entrada.
     
     Parámetros:
     - mu: Coeficiente de fricción entre los neumáticos y la carretera.
-    - t: Tiempo de percepción de las camáras.
-    - l: Tiempo de latencia que tarda el sistema del vehiculo autonomo en procesar los datos.
+    - t: Tiempo de procesamiento de los datos.
+    - l: Tiempo de latencia que tarda el sistema del vehiculo autonomo demora en realizar la maniobra.
     - B: Distancia de desplazamiento debida a la longitud del coche.
     - cog: Centro de gravedad del vehículo.
     - wheelbase: Distancia entre los ejes delantero y trasero del vehículo.
@@ -86,16 +83,18 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     # Parámetros fijos para el modelo 
     g = 9.81
     a = - mu * g  # Desaceleración durante el frenado [m/s^2]
-    Tper = t  # Tiempo de percepción
-    Tact = l  # Latencia
-    d_offset = B  # Distancia de desplazamiento debida a la longitud del coche.
-    w = wheelbase  # Ancho del vehículo
-    turningCar = turning_angle  # Ángulo de giro del vehículo
+    Tper = t  # Tiempo de percepción [s]
+    Tact = l  # Latencia [s]
+    d_offset = B  # Distancia de desplazamiento debida a la longitud del coche. [m]
+    w = wheelbase  # Ancho del vehículo [m]
+    turningCar = turning_angle  # Radio de giro del vehículo [m]
 
     object_distance = object_distance # Distancia del objeto al sistema óptico en metros
     object_distance_mm = object_distance * 1000  # Distancia del objeto al sistema óptico en milímetros
     object_height = object_height # Altura del objeto en pixeles
     
+    # ---- Arreglar el pixSize, focalLengthPixels, imageHeight para los parametros de la camara que se reciben en app.py ---
+
     pixSize = 4.65e-3  # Tamaño del pixel en milimetros
     focalLengthPixels = 725.0087  # Longitud focal en pixeles
     focalLength = focalLengthPixels * pixSize  # Longitud focal en milimetros
@@ -112,9 +111,8 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     pi = 3.141592653589793
 
     # Rangos de velocidad
-    v_mph = np.arange(1, 151)  # Velocidades de 1 a 150 mph
-    v_kph = v_mph * 1.609  # Conversion de mph a kph
-    v_mtps = v_mph * (1609.34 / 3600)  # Conversion de mph a metros por segundo
+    v_kph = np.arange(1, 151)  # Velocidades de 1 a 150 kph
+    v_mtps = v_kph / 3.6  # Conversion de kph a m/s
 
     # Inicialización de las distancias y constantes
     d_per = np.zeros_like(v_mtps)
@@ -134,12 +132,14 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         d_act[v - 1] = v_mtps[v - 1] * Tact
         d_brake[v - 1] = - v_mtps[v - 1] ** 2 / (2 * a)
         d_look_stop[v - 1] = d_offset + d_per[v - 1] + d_act[v - 1] + d_brake[v - 1]
-        #Distancias de esquiva
+        
+        # Distancias de esquiva
         K_roll[v - 1] = (g * (w / 2)) / (cog * v_mtps[v - 1] ** 2)
         K_slip[v - 1] = (mu * g) / (v_mtps[v - 1] ** 2)
         turning[v - 1] = max(1 / (min(K_roll[v - 1], K_slip[v - 1])), turningCar)
         d_swerve[v - 1] = np.real(np.sqrt(turning[v - 1] ** 2 - (turning[v - 1] - w) ** 2))
         d_look_swerve[v - 1] = d_offset + d_per[v - 1] + d_act[v - 1] + d_swerve[v - 1]
+
 
     # Variables y cálculos para la primera gráfica (AOV vs Velocidad)
     HFOV = np.zeros_like(v_mtps)
@@ -329,12 +329,14 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
         # Indice del valor más cercano a la distancia del objeto para la cota
         index_obj_distance = (np.abs(d_look_stop - object_distance)).argmin()
+        if d_look_stop[index_obj_distance] > object_distance:
+            index_obj_distance -= 1
 
         fig3.add_trace(go.Scatter(
         x=[v_kph[index_obj_distance]], y=[d_look_stop[index_obj_distance]], 
         mode='markers+text', 
         name='Selected Object',
-        text=[f'Object Distance: {object_distance:.2f} m'],
+        text=[f'Object Distance: {object_distance:.2f} m - Velocidad segura: {v_kph[index_obj_distance]:.2f} km/h'],
         textposition='top right',
         textfont=dict(size=10),
         marker=dict(color='magenta', size=15),
@@ -409,12 +411,14 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
         # Indice del valor más cercano a la distancia del objeto para la cota
         index_obj_distance = (np.abs(d_look_swerve - object_distance)).argmin()
+        if d_look_swerve[index_obj_distance] > object_distance:
+            index_obj_distance -= 1
 
         fig4.add_trace(go.Scatter(
         x=[v_kph[index_obj_distance]], y=[d_look_swerve[index_obj_distance]], 
         mode='markers+text', 
         name='Selected Object',
-        text=[f'Object Distance: {object_distance:.2f} m'],
+        text=[f'Object Distance: {object_distance:.2f} m - Velocidad segura: {v_kph[index_obj_distance]:.2f} km/h'],
         textposition='top right',
         marker=dict(color='magenta', size=15),
         textfont=dict(size=10),

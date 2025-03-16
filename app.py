@@ -19,6 +19,7 @@ from PIL import Image
 from glob import glob
 import shutil
 from gradio_modal import Modal
+import random
 
 # Añadir directorios al path
 sys.path.extend([
@@ -32,6 +33,7 @@ from detr.image_processing import preprocess_image
 from detr.model_detr import load_detr_model, COCO_INSTANCE_CATEGORY_NAMES
 from yolov11.model_yolo import load_yolov11_model
 from stereo_estimation.NMRF.disparity_inference import run_inference
+
 
 """
 Función main para la interfaz de Gradio.
@@ -230,6 +232,28 @@ stereo_output_pred = None
 image_path_left_original = None
 objects_info = []  # Almacenar los objetos detectados en la imagen
 
+# Datos del dataset KITTI
+KITTI_FOCAL_LENGTH = 725.0087
+KITTI_BASELINE = 0.532725
+KTTI_IMAGES_LEFT = [
+"./images/stereo_images/kitti_images_left/000004_10.png"
+]
+KITTI_IMAGES_RIGHT = [
+"./images/stereo_images/kitti_images_right/000004_10.png"
+]
+
+# Datos del dataset DrivingStereo
+DRIVING_STEREO_FOCAL_LENGTH = 2007.113
+DRIVING_STEREO_BASELINE = 0.54
+DRIVING_STEREO_IMAGES_LEFT = [
+"./images/stereo_images/driving_stereo_images_left/2018-10-19-09-30-39_2018-10-19-09-31-02-413.png"
+]
+DRIVING_STEREO_IMAGES_RIGHT = [
+"./images/stereo_images/driving_stereo_images_right/2018-10-19-09-30-39_2018-10-19-09-31-02-413.png"
+]
+
+dataset_selection = gr.Radio(["KITTI", "Driving Stereo"], label="Select Dataset", value="KITTI")
+
 def save_temp_image(image_array, output_name=None, start_number=5):
     """
     Guarda una imagen numpy.ndarray en un archivo temporal y devuelve la ruta del archivo.
@@ -303,7 +327,26 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     # En caso de que no se encuentre un archivo, lanzar un error
     raise FileNotFoundError("No generated image was found in the results folder.")
 
-def generate_depth_map(disparity_path=None, focal_length=2007.113, baseline=0.54):
+def get_camera_parameters(selected_dataset, own_focal_length=None, own_baseline=None):
+    if selected_dataset == "KITTI":
+        return KITTI_FOCAL_LENGTH, KITTI_BASELINE
+    elif selected_dataset == "Driving Stereo":
+        return DRIVING_STEREO_FOCAL_LENGTH, DRIVING_STEREO_BASELINE
+    elif selected_dataset == "Own images":
+        if own_focal_length and own_baseline:
+            try:
+                return float(own_focal_length), float(own_baseline)
+            except ValueError:
+                return None, None  # Evitar errores por datos no válidos
+        else:
+            return None, None
+    else:
+        # Caso en el que no se seleccionó ningún dataset
+        return None, None
+
+
+
+def generate_depth_map(disparity_path=None, focal_length=None, baseline=None):
     """
     Genera un mapa de profundidad con una barra de colores en el rango de metros 0-100.
     """
@@ -311,6 +354,11 @@ def generate_depth_map(disparity_path=None, focal_length=2007.113, baseline=0.54
 
     if stereo_output_pred is None:
         raise ValueError("No disparity data available.")
+    
+    if focal_length is None or baseline is None:
+        return gr.Warning("⚠️ Please select a dataset or provide your own camera parameters.")
+
+    print(f"✅ Parámetros recibidos en `generate_depth_map`: Focal Length = {focal_length}, Baseline = {baseline}")
 
     # Usar la matriz de disparidad global si no se proporciona una ruta
     disparity = stereo_output_pred
@@ -323,11 +371,9 @@ def generate_depth_map(disparity_path=None, focal_length=2007.113, baseline=0.54
     depth_map = (focal_length * baseline) / disparity
 
     depth_map = np.round(depth_map.numpy() * 256).astype(np.uint16)
-
     depth_map = depth_map.astype(np.float32) / 256.0
 
-
-    print(f"Valor minimo y maximo del depth map en la funcion generate depth map",depth_map.min(), depth_map.max())
+    print(f"Valor mínimo y máximo del depth map en `generate_depth_map`: {depth_map.min()}, {depth_map.max()}")
 
     # Crear figura con barra de colores
     fig, ax = plt.subplots(figsize=(10, 5), dpi=300, frameon=False)
@@ -346,7 +392,6 @@ def generate_depth_map(disparity_path=None, focal_length=2007.113, baseline=0.54
         cbar.ax.xaxis.set_tick_params(color='black')
         plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='black')  # Cambiar el color de las etiquetas a negro
 
-    
     ax.axis('off')
 
     # Eliminar completamente márgenes blancos
@@ -363,9 +408,12 @@ def generate_depth_map(disparity_path=None, focal_length=2007.113, baseline=0.54
     plt.savefig(output_path_with_colorbar, bbox_inches='tight', pad_inches=0, dpi=300, transparent=True)
     plt.close()
 
+    print(f"✅ Mapa de profundidad guardado en: {output_path_with_colorbar}")
+
     return output_path_with_colorbar
 
-def only_depth_map(disparity_path=None, focal_length=2007.113, baseline=0.54, input_image_path=None):
+
+def only_depth_map(disparity_path=None, focal_length=None, baseline=None, input_image_path=None):
     """
     Genera un mapa de profundidad a partir de un mapa de disparidad.
 
@@ -383,10 +431,14 @@ def only_depth_map(disparity_path=None, focal_length=2007.113, baseline=0.54, in
     if stereo_output_pred is None or stereo_output_image is None:
         raise ValueError("No disparity data available.")
 
+    if focal_length is None or baseline is None:
+        print("❗️ Warning: Focal length or baseline not provided.")
+        return None, None  # Garantiza que siempre se retornen dos valores.
+
     # Usar la matriz de disparidad global si no se proporciona una ruta
     disparity = stereo_output_pred
 
-    print(f"Valores mínimos y máximos en la función only_depth_map: {disparity.min()}, {disparity.max()}, {disparity.shape}, {disparity.dtype}")
+    print(f"Valores mínimos y máximos en la función only_depth_map: {disparity.min()}, {disparity.max()}")
 
     # Evitar divisiones por cero y valores muy pequeños
     min_disparity = 1e-8
@@ -396,7 +448,6 @@ def only_depth_map(disparity_path=None, focal_length=2007.113, baseline=0.54, in
     depth_map = (focal_length * baseline) / disparity
 
     print(f"Valores mínimos y máximos del depth map en la función only_depth_map: {depth_map.min()}, {depth_map.max()}")
-    print(f"Forma del depth map en la función only_depth_map: {depth_map.shape}, {depth_map.dtype}")
 
     base_name = os.path.splitext(os.path.basename(stereo_output_image))[0]
     output_name = f"{base_name}.png"
@@ -409,7 +460,7 @@ def only_depth_map(disparity_path=None, focal_length=2007.113, baseline=0.54, in
     save_depth_map = np.round(depth_map.numpy() * 256).astype(np.uint16)
     Image.fromarray(save_depth_map, mode='I;16').save(output_path)
 
-    print(f"Mapa de profundidad guardado en: {output_path}")
+    print(f"✅ Mapa de profundidad guardado en: {output_path}")
 
     return depth_map, output_path
 
@@ -428,83 +479,21 @@ def clear_folder(folder_path):
             except Exception as e:
                 print(f"❌ Error al borrar {file_path}: {e}")
 
-# Función para procesar todas las imágenes en una carpeta (Disparidad)
-def process_stereo_images(left_images, right_images, disparity_output_folder):
-    os.makedirs(disparity_output_folder, exist_ok=True)
-
-    clear_folder(disparity_output_folder)
-
-    if len(left_images) != len(right_images):
-        return gr.Warning("El número de imágenes izquierda y derecha no coincide.")
-
-    processed_images = []
-    for left, right in zip(left_images, right_images):
-        # Obtener nombre base
-        base_name = os.path.basename(left.name)
-
-        # Ejecutar inferencia estéreo
-        stereo_inference(left.name, right.name)
-
-        # Guardar imagen de disparidad generada
-        output_path = os.path.join(disparity_output_folder, base_name)
-        cv2.imwrite(output_path, cv2.imread(stereo_output_image))
-        processed_images.append(output_path)
-
-    return processed_images[0]  # Solo muestra la primera imagen
-
-def process_depth_images(disparity_npy_files, depth_output_folder, focal_length=2007.113, baseline=0.532725):
-    """
-    Procesa todas las matrices de disparidad en formato `.npy` y genera mapas de profundidad.
-    """
-    os.makedirs(depth_output_folder, exist_ok=True)
-
-    clear_folder(depth_output_folder)
-
-    processed_images = []
-    for disparity_npy in disparity_npy_files:
-        base_name = os.path.basename(disparity_npy.name).replace(".npy", ".png")
-
-        # 🔹 Verificar que el archivo tenga extensión `.npy`
-        if not disparity_npy.name.endswith('.npy'):
-            print(f"❌ Error: Solo se permiten archivos .npy. Archivo no válido: {disparity_npy.name}")
-            continue
-
-        # 🔹 Cargar el archivo `.npy`
-        try:
-            disparity = np.load(disparity_npy.name)
-        except Exception as e:
-            print(f"❌ Error cargando {disparity_npy.name}: {e}")
-            continue
-
-        if disparity is None or disparity.size == 0:
-            print(f"❌ Error: Archivo vacío o no válido {disparity_npy.name}")
-            continue
-
-        # 🔹 Evitar división por cero
-        min_disparity = 1e-8
-        disparity[disparity < min_disparity] = min_disparity
-
-        # 🔹 Calcular el mapa de profundidad
-        depth_map = (focal_length * baseline) / disparity
-
-        # 🔹 Convertir a uint16 para guardar correctamente
-        save_depth_map = np.round(depth_map * 256).astype(np.uint16)
-        output_path = os.path.join(depth_output_folder, base_name)
-        Image.fromarray(save_depth_map, mode='I;16').save(output_path)
-
-        print(f"✅ Mapa de profundidad guardado en: {output_path}")
-        processed_images.append(output_path)
-
-    return processed_images[0] if processed_images else gr.Warning("❌ No se generaron mapas de profundidad.")
-
 # Función para detección de objetos y calcular la distancia usando la disparidad
-def object_detection_with_disparity(selected_model_name):
+def object_detection_with_disparity(selected_model_name, selected_dataset, focal_length, baseline):
     global stereo_output_image, image_path_left_original, objects_info
     if not stereo_output_image:
         return None, gr.Warning("A Stereo Inference output image has not been generated.")
+    
+    focal_length, baseline = get_camera_parameters(selected_dataset, focal_length, baseline)
 
     # Generar el mapa de profundidad Z (en metros)
-    depth, depth_map_path = only_depth_map()
+    depth, depth_map_path = only_depth_map(stereo_output_image, focal_length, baseline)
+
+    # Verificar que el depth_map se generó correctamente
+    if depth is None or depth_map_path is None:
+        return None, gr.Warning("⚠️ Depth map generation failed. Please check the provided parameters.")
+
     image = cv2.imread(image_path_left_original, cv2.IMREAD_COLOR)
 
     detr_bboxes, yolo_bboxes = [], []  # Inicializar variables para las cajas delimitadoras
@@ -740,9 +729,9 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object
 def update_vehicle_params(vehicle_model):
     vehicle_params = {
         "Volkswagen Passat (B6)": (11.4, 0.55, 2.71),
+        "Honda Aviancer": (11.6, 0.66, 2.82),
         "Tesla S": (11.8, 0.46, 2.96),
         "Toyota Supra": (10.40, 0.4953, 2.47),
-        "Ford Mustang Shelby GT350": (12.67, 0.4953, 2.72)
     }
     return vehicle_params.get(vehicle_model, (11.4, 0.55, 2.71))  # Por defecto Volkswagen Passat (B6)
 
@@ -787,7 +776,7 @@ with gr.Blocks(theme=seafoam) as demo:
         gr.HTML("""
         <div style="
             animation: slideUpFadeIn 0.6s ease-out;
-            background-color: #f0f8ff;
+            background-color: #ffffff;
             color:rgb(102, 131, 159);
             padding: 30px;
             border-radius: 20px;
@@ -800,7 +789,7 @@ with gr.Blocks(theme=seafoam) as demo:
             <div style="text-align: center; display: flex; justify-content: center; align-items: center; gap: 10px;">
             <img src="https://i.ibb.co/VLwzcq2/logo.png" alt="Icon" style="width: 50px;">
                 <h1 style="margin: 0; font-size: 28px;">
-                    Welcome to <span style='color: #1abc9c;'>Safe Navigation Speed Estimation</span>
+                    Welcome to <span style='color: #3275b8;'>Safe Navigation Speed Estimation</span>
                 </h1>
             <img src="https://i.ibb.co/VLwzcq2/logo.png" alt="Icon" style="width: 50px;">
             </div>
@@ -951,6 +940,7 @@ with gr.Blocks(theme=seafoam) as demo:
     </div>
     """)
 
+
     with gr.Tab("Stereo Inference", elem_id="stereo-inference-tab"):
         gr.Markdown("## Stereo Inference", elem_id="stereo-inference-title")
         gr.HTML("""
@@ -1022,51 +1012,49 @@ with gr.Blocks(theme=seafoam) as demo:
         <p style="text-align: center;">Upload a pair of stereo images or choose the Example Stereo Images below, to perform stereo inference and generate the disparity map.</p>
         """)
 
-        with gr.Tab("Generar Disparidad"):
-            left_images = gr.File(label="Cargar imágenes izquierda", file_count="directory")
-            right_images = gr.File(label="Cargar imágenes derecha", file_count="directory")
-            disparity_output_folder = gr.Textbox(value="./outputs/disparity_results", label="Carpeta de salida para disparidad")
 
-            disparity_button = gr.Button("Generar Mapas de Disparidad")
-            disparity_output_image = gr.Image(label="Ejemplo de Mapa de Disparidad Generado")
-
-            disparity_button.click(
-                process_stereo_images,
-                inputs=[left_images, right_images, disparity_output_folder],
-                outputs=disparity_output_image
-            )
-
-        with gr.Tab("Generar Profundidad"):
-            disparity_images = gr.File(label="Cargar mapas de disparidad", file_count="directory")
-            depth_output_folder = gr.Textbox(value="./outputs/depth_results", label="Carpeta de salida para profundidad")
-
-            depth_button = gr.Button("Generar Mapas de Profundidad")
-            depth_output_image = gr.Image(label="Ejemplo de Mapa de Profundidad Generado")
-
-            depth_button.click(
-                process_depth_images,
-                inputs=[disparity_images, depth_output_folder],
-                outputs=depth_output_image
-            )
-
-        #demo.launch(share=True)
+        dataset_selection = gr.Radio(["Own images", "KITTI", "Driving Stereo"], label="Select Dataset", value="Own images", elem_id="model-selector")
 
         with gr.Row():
             image_path_left = gr.Image(label="Left Image")
             image_path_right = gr.Image(label="Right Image")
 
-        # Agregar ejemplos de imágenes estéreos 
-        gr.HTML('<div class="example-label">Example Stereo Images</div>')
-        
-        examples = gr.Examples(
-            examples=[
-            ["./images/stereo_images/kitti_images_left/000013_10.png", "./images/stereo_images/kitti_images_right/000013_10.png"],
-            ["./images/stereo_images/kitti_images_left/0000000030.png", "./images/stereo_images/kitti_images_right/0000000030.png"],
-            ["./images/stereo_images/kitti_images_left/0000000045.png", "./images/stereo_images/kitti_images_right/0000000045.png"],
-            ["./images/stereo_images/kitti_images_left/0000000060.png", "./images/stereo_images/kitti_images_right/0000000060.png"]
-            ],
-            inputs=[image_path_left, image_path_right]
+
+        # Campo para mostrar los parámetros seleccionados
+        focal_length_display = gr.Number(label="Focal Length [px]", interactive=True)
+        baseline_display = gr.Number(label="Baseline [meters]", interactive=True)
+
+        # Función para actualizar imágenes y parámetros según el dataset seleccionado
+        def update_examples(selected_dataset):
+            if selected_dataset == "KITTI":
+                random_index = random.randint(0, len(KTTI_IMAGES_LEFT) - 1)
+                return (
+                    KTTI_IMAGES_LEFT[random_index],
+                    KITTI_IMAGES_RIGHT[random_index],
+                    KITTI_FOCAL_LENGTH, KITTI_BASELINE
+                )
+            elif selected_dataset == "Driving Stereo":
+                random_index = random.randint(0, len(DRIVING_STEREO_IMAGES_LEFT) - 1)
+                return (
+                    DRIVING_STEREO_IMAGES_LEFT[random_index],
+                    DRIVING_STEREO_IMAGES_RIGHT[random_index],
+                    DRIVING_STEREO_FOCAL_LENGTH, DRIVING_STEREO_BASELINE
+                )
+            elif selected_dataset == "Own images":
+                return (
+                    None, None,
+                    "", "",
+                )
+
+        dataset_selection.change(
+            update_examples, 
+            inputs=[dataset_selection], 
+            outputs=[
+                image_path_left, image_path_right,
+                focal_length_display, baseline_display
+            ]
         )
+
 
         run_button = gr.Button("Run Inference", elem_id="inference-button")
         output_image = gr.Image(label="Disparity Map", visible=True, scale=1, elem_id="disparity-map")
@@ -1076,22 +1064,33 @@ with gr.Blocks(theme=seafoam) as demo:
         depth_image = gr.Image(label="Depth Map", visible=True)
 
         # Conectar el botón con la función
-        def display_depth_map():
+        def display_depth_map(selected_dataset, focal_length, baseline):
             global stereo_output_image
+
             if stereo_output_image is None:
                 return gr.Warning("Please run stereo inference first to generate the disparity map.")
+            
+            if selected_dataset == "Own images" and (not focal_length or not baseline):
+                return gr.Warning("⚠️ Please provide valid focal length and baseline values for 'Own Images'.")
+            
+            focal_length, baseline = get_camera_parameters(selected_dataset, focal_length, baseline)
+
+            if focal_length is None or baseline is None:
+                return gr.Warning("Please provide the focal length and baseline values.")
+
+            print(f"✅ Parámetros recibidos en `display_depth_map`: Focal Length = {focal_length}, Baseline = {baseline}")
 
             # Generar el mapa de profundidad con la barra de colores
-            depth_output_path_with_colorbar = generate_depth_map(stereo_output_image)
+            depth_output_path_with_colorbar = generate_depth_map(stereo_output_image, focal_length, baseline)
 
             # Generar y guardar el mapa de profundidad sin visualizar
-            only_depth_map(stereo_output_image)
+            only_depth_map(stereo_output_image, focal_length, baseline)
 
             # Devolver la imagen generada directamente
             return gr.update(value=depth_output_path_with_colorbar, visible=True)
 
 
-        generate_depth_button.click(display_depth_map, inputs=[], outputs=depth_image)
+        generate_depth_button.click(display_depth_map, inputs=[dataset_selection, focal_length_display, baseline_display], outputs=depth_image)
 
     with gr.Tab("Object Detection"):
         gr.Markdown("## Object Detection", elem_id="object-detection-title")
@@ -1133,7 +1132,7 @@ with gr.Blocks(theme=seafoam) as demo:
         detect_output_image = gr.Plot(label="Object Detection", visible=True)
         cards_placeholder = gr.HTML(label="Detected Objects Info", visible=True)
     
-    run_button.click(object_detection_with_disparity, inputs=[model_selector], outputs=[detect_output_image, cards_placeholder])
+    run_button.click(object_detection_with_disparity, inputs=[model_selector, dataset_selection, focal_length_display, baseline_display], outputs=[detect_output_image, cards_placeholder])
 
     with gr.Tab("Safe speed distance"):
         gr.Markdown("## Safe speed calculation section", elem_id="calculate-distance-title")
@@ -1148,18 +1147,18 @@ with gr.Blocks(theme=seafoam) as demo:
         """)        
         with gr.Row():
             with gr.Column():
-                mu = gr.Slider(0.0, 1.0, value=0.3, step=0.01, label="Coefficient of friction (mu)")
-                t = gr.Slider(0.0, 5.0, value=0.2, step=0.01, label="Perception time (t) [s]")
+                mu = gr.Slider(0.0, 2.0, value=0.8, step=0.01, label="Coefficient of friction (mu)")
+                t = gr.Slider(0.0, 10.0, value=0.5, step=0.01, label="Perception time (t) [s]")
                 l = gr.Slider(0.0, 5.0, value=0.25, step=0.01, label="Latency (l) [s]")
-                B = gr.Slider(0.0, 3.0, value=2.0, step=0.1, label="Offset distance [m]")
+                B = gr.Slider(0.0, 3.0, value=2.0, step=0.1, label="Offset distance (df) [m]")
 
             with gr.Column():
                 vehicle_name = gr.Dropdown(
                     label="Vehicle Model", 
-                    choices=["Volkswagen Passat (B6)","Tesla S", "Toyota Supra", "Ford Mustang Shelby GT350"],
+                    choices=["Volkswagen Passat (B6)","Honda Aviancer","Tesla S", "Toyota Supra"],
                     interactive=True
                 )
-                turning_car = gr.Slider(0.0, 20.0, value=11.4, step=1.0, label="Turning Car [°]")
+                turning_car = gr.Slider(0.0, 20.0, value=11.4, step=1.0, label="Turning Radius [m]")
                 cog = gr.Slider(0.0, 2.0, value=0.55, step=0.01, label="Height of Center Gravity (COG) [m]")
                 wheelbase = gr.Slider(0.0, 3.0, value=2.71, step=0.01, label="Width of Wheelbase [m]")
 

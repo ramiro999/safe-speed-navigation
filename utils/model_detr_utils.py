@@ -126,22 +126,7 @@ def generate_kitti_txt(image_path, model, output_txt_path):
                 print(f"⚠️ Advertencia: Se encontró un label fuera de rango ({label}), será ignorado.")
                 continue  # Ignorar esta detección
             
-            x0, y0, x1, y1 = bbox
-            # height_pixel = y1 - y0 # Altura bbox
-
-            # La caja delimitadora debe ser mayor a 25 pixels de altura
-            # if height_pixel < 25:
-            #    print(f" Detección descartada (altura {height_pixel}px < 25px): {COCO_INSTANCE_CATEGORY_NAMES[label]} ")
-            #    continue
-
-            # La deteccion esta en "Dont Care"
-            #dontcare_flag = is_in_dontcare(x0, y0, x1, y1, dontcare_boxes)
-            #if dontcare_flag:
-            #    print(f" Deteccion en region Dont Care, sera registrada como especial: {COCO_INSTANCE_CATEGORY_NAMES[label]}")
-            #    line = f"DontCare 0.00 0 0 {x0} {y0} {x1} {y1} 0 0 0 0 0 0 0 {score:.4f}\n"
-            #else:
-            #    line = f"{COCO_INSTANCE_CATEGORY_NAMES[label]} 0.00 0 0 {x0} {y0} {x1} {y1} 0 0 0 0 0 0 0 {score:.4f}\n"
-        
+            x0, y0, x1, y1 = bbox       
             line = f"{COCO_INSTANCE_CATEGORY_NAMES[label]} 0.00 0 0 {x0} {y0} {x1} {y1} 0 0 0 0 0 0 0 {score:.4f}\n"
             f.write(line)
     
