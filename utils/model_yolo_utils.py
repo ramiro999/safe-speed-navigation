@@ -9,8 +9,8 @@ from ultralytics import YOLO
 import glob
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from yolov11.image_processing_yolo import preprocess_image, draw_yolo_results
-from yolov11.model_yolo import load_yolov11_model
+from yolov11_finetuning.image_processing_yolo import preprocess_image, draw_yolo_results
+from yolov11_finetuning.model_yolo_f import load_yolov11_model_f
 
 """
 Este script obtiene el .txt con la información necesaria para evaluar la detección de objetos (IoU y mAP)
@@ -79,10 +79,10 @@ def generate_kitti_txt(image_path, model, output_txt_path, conf_threshold=0.5):
 
 # Cargar el modelo YOLOv11
 yolo_model_path = "../yolov11/yolov11n-kitti/train5/weights/best.pt"
-yolo_model = load_yolov11_model(yolo_model_path)
+yolo_model = load_yolov11_model_f(yolo_model_path)
 
 # Ruta de la imagen y del archivo de salida
-image_path = "../images/obj_det_images/"
+image_path = "../sample_data/valid/"
 output_folder = "../labels/pred/yolo/"
 
 # Obtener todas las imagenes en la carpeta

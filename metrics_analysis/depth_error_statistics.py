@@ -59,23 +59,33 @@ metrics = ["mae", "rmse", "imae", "irmse"]
 
 # Entrenamiento
 
-# files = {
-#     "road": "../metrics_analysis/results_depth/kitti/train/road/metric_summary_train_road.csv",
-#     "residential": "../metrics_analysis/results_depth/kitti/train/residential/metric_summary_train_residential.csv",
-#     "person": "../metrics_analysis/results_depth/kitti/train/person/metric_summary_train_person.csv",
-#     "city": "../metrics_analysis/results_depth/kitti/train/city/metric_summary_train_city.csv",
-#     "campus": "../metrics_analysis/results_depth/kitti/train/campus/metric_summary_train_campus.csv",
-# }
+files = {
+    "Carretera": "../metrics_analysis/results_depth/kitti/train/road/metric_summary_train_road.csv",
+    "Residencial": "../metrics_analysis/results_depth/kitti/train/residential/metric_summary_train_residential.csv",
+    "Persona": "../metrics_analysis/results_depth/kitti/train/person/metric_summary_train_person.csv",
+    "Ciudad": "../metrics_analysis/results_depth/kitti/train/city/metric_summary_train_city.csv",
+    "Campus": "../metrics_analysis/results_depth/kitti/train/campus/metric_summary_train_campus.csv",
+}
 
 # Validacion
 
-files = {
-     "road": "../metrics_analysis/results_depth/kitti/val/road/metric_summary_val_road.csv",
-     "residential": "../metrics_analysis/results_depth/kitti/val/residential/metric_summary_val_residential.csv",
-#     "person": "../metrics_analysis/results_depth/kitti/val/person/metric_summary_train_person.csv",
-     "city": "../metrics_analysis/results_depth/kitti/val/city/metric_summary_val_city.csv",
-     "campus": "../metrics_analysis/results_depth/kitti/val/campus/metric_summary_val_campus.csv",
-}
+# files = {
+#      "Carretera": "../metrics_analysis/results_depth/kitti/val/road/metric_summary_val_road.csv",
+#      "Residencial": "../metrics_analysis/results_depth/kitti/val/residential/metric_summary_val_residential.csv",
+# #     "person": "../metrics_analysis/results_depth/kitti/val/person/metric_summary_train_person.csv",
+#      "Ciudad": "../metrics_analysis/results_depth/kitti/val/city/metric_summary_val_city.csv",
+#      "Campus": "../metrics_analysis/results_depth/kitti/val/campus/metric_summary_val_campus.csv",
+# }
+
+
+# Prueba
+# files = {
+#     "Conducción": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_driving.csv",
+#     "Soleado": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_sunny.csv", 
+#     "Neblina": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_foggy.csv",
+#     "Nublado": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_cloudy.csv",
+#     "Lluvioso": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_rainy.csv"
+# }
 
 
 # Leer los archivos y almacenarlos en un diccionario

@@ -1,4 +1,4 @@
-# autonomous_navigation_calculator.py:
+# safety_calculator.py:
 import numpy as np
 import plotly.graph_objects as go
 import torch
@@ -91,27 +91,15 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
     object_distance = object_distance # Distancia del objeto al sistema óptico en metros
     object_distance_mm = object_distance * 1000  # Distancia del objeto al sistema óptico en milímetros
-    object_height = object_height # Altura del objeto en pixeles
-    
-    # ---- Arreglar el pixSize, focalLengthPixels, imageHeight para los parametros de la camara que se reciben en app.py ---
-
-    pixSize = 4.65e-3  # Tamaño del pixel en milimetros
-    focalLengthPixels = 725.0087  # Longitud focal en pixeles
-    focalLength = focalLengthPixels * pixSize  # Longitud focal en milimetros
-    imageHeight = 375  # Altura de la imagen en pixeles
-
-    sensorSize = pixSize * imageHeight # Tamaño del sensor en milimetros
-
-    gsd = (object_distance_mm * sensorSize) / (focalLength * imageHeight)  # Ground Sampling Distance (GSD) en centrimetros por pixel
-
-    hp = object_height * gsd  # Altura del objeto en milimetros para eliminar la dependencia de mm/pixel
-
-    hp = hp / 1000  # Altura del objeto en metros
+    hp = object_height # Altura del objeto en metros
+   
 
     pi = 3.141592653589793
 
+    speed_limit = 251
+
     # Rangos de velocidad
-    v_kph = np.arange(1, 151)  # Velocidades de 1 a 150 kph
+    v_kph = np.arange(1, 251)  # Velocidades de 1 a 150 km/h
     v_mtps = v_kph / 3.6  # Conversion de kph a m/s
 
     # Inicialización de las distancias y constantes
@@ -125,8 +113,8 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
     d_swerve = np.zeros_like(v_mtps)
     d_look_swerve = np.zeros_like(v_mtps)
 
-    # Calcular las distancias de frenado y maniobra para la primera gráfica
-    for v in range(1, 151):
+    # Calcular las velocidades para distancias de frenado y maniobra para la primera gráfica
+    for v in range(1, 251):
         # Distancias de frenado
         d_per[v - 1] = v_mtps[v - 1] * (2 * Tper)
         d_act[v - 1] = v_mtps[v - 1] * Tact
@@ -143,73 +131,88 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
 
     # Variables y cálculos para la primera gráfica (AOV vs Velocidad)
     HFOV = np.zeros_like(v_mtps)
-    hc = 1.65  # Altura de la cámara, dataset KITTI 1.65 m
+    hc = 1.65  # Altura de la cámara promedio, dataset KITTI 1.65 m
     thetaSlope = np.deg2rad(15)  # Ángulo de la pendiente, por lo general 15 grados
     
     thetaMin = np.arctan(hc / d_look_stop)  # Ángulo debajo del horizonte determinado por la distancia de frenado
     thetaMax = np.arctan(hc / d_offset)  # Ángulo debajo del horizonte determinado por la longitud de la base B (longitud del automóvil)
     VFOV = 2 * thetaSlope + np.minimum(thetaMin, thetaMax)
 
-    for v in range(1, 151):
+    for v in range(1, 251):
         HFOV[v - 1] = d_look_stop[v - 1] / turning[v - 1]
 
-# Gráfico 1: Angle of View (AOV)
+    selected_ifov = None
+    safe_speed_stop = None
+    safe_speed_swerve = None
+    safe_speed_stop_haov = None
+    safe_speed_swerve_haov = None
+    safe_speed_stop_vaov = None
+    safe_speed_swerve_vaov = None
+    object_height_meters = hp
+    
+    if object_distance is not None:
+        selected_ifov = np.arctan(hc / object_distance) - np.arctan((hc - hp) / object_distance)
+    
+    if object_distance is not None:
+        index_obj_distance = (np.abs(d_look_stop - object_distance)).argmin()
+        index_obj_distance = min(index_obj_distance, len(d_look_stop) - 1)  # Corregir índice fuera de rango
+
+        if d_look_stop[index_obj_distance] > object_distance:
+            index_obj_distance = max(0, index_obj_distance - 1)  # Evitar índices negativos
+        safe_speed_stop = v_kph[index_obj_distance] if index_obj_distance >= 0 else None
+
+    if object_distance is not None:
+        index_obj_distance = (np.abs(d_look_swerve - object_distance)).argmin()
+        index_obj_distance = min(index_obj_distance, len(d_look_swerve) - 1)  # Corregir índice fuera de rango
+
+        if d_look_swerve[index_obj_distance] > object_distance:
+            index_obj_distance = max(0, index_obj_distance - 1)  # Evitar índices negativos
+        safe_speed_swerve = v_kph[index_obj_distance] if index_obj_distance >= 0 else None
+
+    if safe_speed_stop:
+        idx = np.abs(v_kph - safe_speed_stop).argmin()
+        idx = min(idx, len(v_kph) - 1)
+        safe_speed_stop_haov = np.degrees(HFOV[idx])
+        safe_speed_stop_vaov = np.degrees(VFOV[idx])
+
+    if safe_speed_swerve:
+        idx = np.abs(v_kph - safe_speed_swerve).argmin()
+        idx = min(idx, len(v_kph) - 1)
+        safe_speed_swerve_haov = np.degrees(HFOV[idx])
+        safe_speed_swerve_vaov = np.degrees(VFOV[idx])
+
+    # Gráfico 1: Angle of View (AOV)
     HFOV = d_look_stop / turning
-    thetaMin = np.arctan(hc / d_look_stop)
-    thetaMax = np.arctan(hc / d_offset)
     VFOV = 2 * thetaSlope + np.minimum(thetaMin, thetaMax)
 
     fig1 = go.Figure()
     fig1.add_trace(go.Scatter(x=v_kph, y=np.degrees(HFOV), mode='lines', name='HAOV [degrees]',
-                              line=dict(color=style['line_color']['lime'], width=3)))
+                            line=dict(color=style['line_color']['lime'], width=3)))
+
+    if safe_speed_stop is not None:
+        fig1.add_trace(go.Scatter(
+            x=[safe_speed_stop], 
+            y=[np.degrees(HFOV[np.abs(v_kph - safe_speed_stop).argmin()])],
+            mode='markers+text',
+            name='Safe Speed (HAOV)',
+            textposition='top right',
+            marker=dict(color='magenta', size=15),
+            showlegend=True
+        ))
+
+    # VAOV con cotas
     fig1.add_trace(go.Scatter(x=v_kph, y=np.degrees(VFOV), mode='lines', name='VAOV [degrees]',
                               line=dict(color=style['line_color']['red'], width=3)))
-    
-    # Cotas de las velocidades a 30 km/h y 60 km/h
-    v_30_kph = 30
-    v_60_kph = 60
-
-    # Índice de los valores más cercanos a 30 km/h y 60 km/h
-    index_30 = (np.abs(v_kph - v_30_kph)).argmin()
-    index_60 = (np.abs(v_kph - v_60_kph)).argmin()
-
-    vfov_30 = np.degrees(VFOV[index_30])
-    vfov_60 = np.degrees(VFOV[index_60])
-
-    fig1.add_trace(go.Scatter(
-        x=[v_kph[index_30]], y=[vfov_30], mode='markers+text', name='VFOV at 30 km/h',
-        text=[f'30 km/h: {vfov_30:.2f} degrees'],
-        textposition='top right',
-        marker=dict(color='yellow', size=10),
-        showlegend=True
-    ))
-
-    fig1.add_trace(go.Scatter(
-        x=[v_kph[index_60]], y=[vfov_60], mode='markers+text', name='VFOV at 60 km/h',
-        text=[f'60 km/h: {vfov_60:.2f} degrees'],
-        textposition='top right',
-        marker=dict(color='cyan', size=10),
-        showlegend=True
-    ))
-
-    # Lineas delimitadoras para las velocidades
-    fig1.add_shape(
-        type='line',
-        x0=v_kph[index_30],
-        y0=0,
-        x1=v_kph[index_30],
-        y1=max(np.degrees(VFOV)),
-        line=dict(color='yellow', width=2, dash='dash')
-    )
-
-    fig1.add_shape(
-        type='line',
-        x0=v_kph[index_60],
-        y0=0,
-        x1=v_kph[index_60],
-        y1=max(np.degrees(VFOV)),
-        line=dict(color='cyan', width=2, dash='dash')
-    )
+    if safe_speed_stop is not None:
+        fig1.add_trace(go.Scatter(
+            x=[safe_speed_stop], 
+            y=[np.degrees(VFOV[np.abs(v_kph - safe_speed_stop).argmin()])],
+            mode='markers+text',
+            name='Safe Speed (VAOV)',
+            textposition='top right',
+            marker=dict(color='purple', size=15),
+            showlegend=True
+        ))
 
     fig1.update_layout(
         title='Angle of View (AOV) VS Vehicle Speed',
@@ -281,48 +284,11 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         font=style['font']
     )
 
-    # Gráfico 3: Distancia de frenado ---------------------------------------------------------------------------------
+    # Gráfico 3: Velocidad para realizar la maniobra de frenado ---------------------------------------------------------------------------------
     fig3 = go.Figure()
     fig3.add_trace(go.Scatter(x=v_kph, y=d_look_stop, mode='lines', name='Stopping Distance [m]',
                               line=dict(color=style['line_color']['aqua'], width=3)))
     
-    # Añadir cotas para las velocidades a 30 km/h y 60 km/h
-    fig3.add_trace(go.Scatter(
-        x=[v_kph[index_30]], y=[d_look_stop[index_30]], mode='markers+text', name='Stopping Distance at 30 km/h',
-        text=[f'30 km/h: {d_look_stop[index_30]:.2f} m'],
-        textposition='top right',
-        textfont=dict(size=10),
-        marker=dict(color='yellow', size=10),
-        showlegend=True
-    ))
-
-    fig3.add_trace(go.Scatter(
-        x=[v_kph[index_60]], y=[d_look_stop[index_60]], mode='markers+text', name='Stopping Distance at 60 km/h',
-        text=[f'60 km/h: {d_look_stop[index_60]:.2f} m'],
-        textposition='top right',
-        textfont=dict(size=10),
-        marker=dict(color='cyan', size=10),
-        showlegend=True
-    ))
-
-    # Lineas delimitadoras horizontales para las velocidades
-    fig3.add_shape(
-        type='line',
-        x0=0,
-        y0=d_look_stop[index_30],
-        x1=max(v_kph),
-        y1=d_look_stop[index_30],
-        line=dict(color='yellow', width=2, dash='dash')
-    )
-
-    fig3.add_shape(
-        type='line',
-        x0=0,
-        y0=d_look_stop[index_60],
-        x1=max(v_kph),
-        y1=d_look_stop[index_60],
-        line=dict(color='cyan', width=2, dash='dash')
-    )
 
     # Línea delimitadora horizontal para la distancia del objeto seleccionado (nueva cota)
     if object_distance is not None:
@@ -332,29 +298,49 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         if d_look_stop[index_obj_distance] > object_distance:
             index_obj_distance -= 1
 
-        fig3.add_trace(go.Scatter(
-        x=[v_kph[index_obj_distance]], y=[d_look_stop[index_obj_distance]], 
-        mode='markers+text', 
-        name='Selected Object',
-        text=[f'Object Distance: {object_distance:.2f} m - Velocidad segura: {v_kph[index_obj_distance]:.2f} km/h'],
-        textposition='top right',
-        textfont=dict(size=10),
-        marker=dict(color='magenta', size=15),
-        showlegend=True
-        ))
+        if index_obj_distance < 0:
+            fig3.add_trace(go.Scatter
+            (
+            x=[0], y=[0], mode='text', name='Stopping Not Possible',
+            text=['Stopping not possible for distance'],
+            textposition='top right',
+            textfont=dict(color='red', size=15),
+            showlegend=False
+            ))
 
-        fig3.add_shape(
-            type='line',
-            x0=0,
-            y0=object_distance,
-            x1=max(v_kph),
-            y1=object_distance,
-            line=dict(color='magenta', width=2, dash='dash'),
-            name="Object Distance"
-        )
+        else:
+
+            fig3.add_vrect(
+                x0=speed_limit, x1=max(v_kph),
+                fillcolor="red", opacity=0.2,
+                layer="below", line_width=0,
+                annotation_text="Unsafe Zone", annotation_position="top left"
+            )
+
+            fig3.add_trace(go.Scatter(
+                x=[v_kph[index_obj_distance]], y=[d_look_stop[index_obj_distance]],
+                mode='markers+text',
+                name='Selected Object',
+                text=[f'Object Distance: {object_distance:.2f} m <br>Safe speed: {v_kph[index_obj_distance]:.2f} km/h'],
+                textposition='top right',
+                textfont=dict(size=10),
+                marker=dict(color='magenta', size=15),
+                showlegend=True
+            ))
+
+            if v_kph[index_obj_distance] < speed_limit:
+                fig3.add_shape(
+                    type='line',
+                    x0=0,
+                    y0=d_look_stop[index_obj_distance],
+                    x1=max(v_kph),
+                    y1=d_look_stop[index_obj_distance],
+                    line=dict(color='magenta', width=2, dash='dash'),
+                    name="Object Distance"
+                )
 
     fig3.update_layout(
-        title='Lookahead Distance for Stopping',
+        title='Safe navigation speed for Stopping',
         xaxis_title='Vehicle speed [km/h]',
         yaxis_title='Lookahead distance [m]',
         yaxis=dict(range=[0, 150]),
@@ -363,49 +349,11 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         font=style['font']
     )
 
-    # Gráfico 4: Distancia de esquiva ----------------------------------------------------------------------------
+    # Gráfico 4: Velocidad para realizar la maniobra de esquiva ----------------------------------------------------------------------------
     fig4 = go.Figure()
     fig4.add_trace(go.Scatter(x=v_kph, y=d_look_swerve, mode='lines', name='Swerving Distance [m]',
                               line=dict(color=style['line_color']['orange'], width=3)))
     
-    # Añadir cotas para las velocidades a 30 km/h y 60 km/h
-    fig4.add_trace(go.Scatter(
-        x=[v_kph[index_30]], y=[d_look_swerve[index_30]], mode='markers+text', name='Swerving Distance at 30 km/h',
-        text=[f'30 km/h: {d_look_swerve[index_30]:.2f} m'],
-        textposition='top right',
-        marker=dict(color='yellow', size=10),
-        textfont=dict(size=10),
-        showlegend=True
-    ))
-
-    fig4.add_trace(go.Scatter(
-        x=[v_kph[index_60]], y=[d_look_swerve[index_60]], mode='markers+text', name='Swerving Distance at 60 km/h',
-        text=[f'60 km/h: {d_look_swerve[index_60]:.2f} m'],
-        textposition='top right',
-        marker=dict(color='cyan', size=10),
-        textfont=dict(size=10),
-        showlegend=True
-    ))
-
-    # Lineas delimitadoras horizontales para las velocidades
-    fig4.add_shape(
-        type='line',
-        x0=0,
-        y0=d_look_swerve[index_30],
-        x1=max(v_kph),
-        y1=d_look_swerve[index_30],
-        line=dict(color='yellow', width=1, dash='dash')
-    )
-
-    fig4.add_shape(
-        type='line',
-        x0=0,
-        y0=d_look_swerve[index_60],
-        x1=max(v_kph),
-        y1=d_look_swerve[index_60],
-        line=dict(color='cyan', width=1, dash='dash')
-    )
-
     # Línea delimitadora horizontal para la distancia del objeto seleccionado (nueva cota)
     if object_distance is not None:
 
@@ -414,29 +362,69 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         if d_look_swerve[index_obj_distance] > object_distance:
             index_obj_distance -= 1
 
-        fig4.add_trace(go.Scatter(
-        x=[v_kph[index_obj_distance]], y=[d_look_swerve[index_obj_distance]], 
-        mode='markers+text', 
-        name='Selected Object',
-        text=[f'Object Distance: {object_distance:.2f} m - Velocidad segura: {v_kph[index_obj_distance]:.2f} km/h'],
-        textposition='top right',
-        marker=dict(color='magenta', size=15),
-        textfont=dict(size=10),
-        showlegend=True
-        ))
+        if index_obj_distance < 0:
+            # 🔴 Mostrar solo el mensaje de "Swerving Not Possible"
+            fig4.add_trace(go.Scatter(
+                x=[0], y=[0], mode='text', name='Swerving Not Possible',
+                text=['Swerving not possible for distance'],
+                textposition='top right',
+                textfont=dict(color='red', size=15),
+                showlegend=False
+            ))
 
-        fig4.add_shape(
-            type='line',
-            x0=0,
-            y0=object_distance,
-            x1=max(v_kph),
-            y1=object_distance,
-            line=dict(color='magenta', width=2, dash='dash'),
-            name="Object Distance"
-        )
+        else:
+            # Agregar la zona insegura solo si se puede esquivar
+            fig4.add_vrect(
+                x0=speed_limit, x1=max(v_kph),
+                fillcolor="red", opacity=0.2,
+                layer="below", line_width=0,
+                annotation_text="Unsafe Zone", annotation_position="top left"
+            )
+
+            if index_obj_distance > speed_limit:
+                fig4.add_trace(go.Scatter(
+                    x=[v_kph[index_obj_distance]], y=[d_look_swerve[index_obj_distance]],
+                    mode='text',
+                    text=['Unsafe: Speed exceeds limit'],
+                    textposition='top right',
+                    textfont=dict(color='red', size=15),
+                    showlegend=False
+                ))
+                fig4.add_shape(
+                    type='line',
+                    x0=0,
+                    y0=object_distance,
+                    x1=speed_limit,
+                    y1=object_distance,
+                    line=dict(color='magenta', width=2, dash='dash'),
+                    name="Object Distance"
+                )
+
+            else:
+                fig4.add_trace(go.Scatter(
+                    x=[v_kph[index_obj_distance]], y=[d_look_swerve[index_obj_distance]], 
+                    mode='markers+text', 
+                    name='Selected Object',
+                    text=[f'Object Distance: {object_distance:.2f} m <br>Safe speed: {v_kph[index_obj_distance]:.2f} km/h'],
+                    textposition='top right',
+                    marker=dict(color='magenta', size=15),
+                    textfont=dict(size=10),
+                    showlegend=True
+                ))
+
+                if v_kph[index_obj_distance] < speed_limit:
+                    fig4.add_shape(
+                        type='line',
+                        x0=0,
+                        y0=d_look_swerve[index_obj_distance],
+                        x1=max(v_kph),
+                        y1=d_look_swerve[index_obj_distance],
+                        line=dict(color='magenta', width=2, dash='dash'),
+                        name="Object Distance"
+                    )
 
     fig4.update_layout(
-        title="Lookahead Distance for Swerving",
+        title="Safe navigation speed for Swerving",
         xaxis_title="Vehicle speed [km/h]",
         yaxis_title="Lookahead distance [m]",
         yaxis=dict(range=[0, 150]),
@@ -445,4 +433,16 @@ def calculate_lookahead_distance(mu, t, l, B, cog, wheelbase, turning_angle, obj
         font=style['font']
     )
 
-    return fig1, fig2, fig3, fig4
+
+
+    return (
+        fig1, fig2, fig3, fig4,
+        selected_ifov,
+        safe_speed_stop,
+        safe_speed_swerve,
+        safe_speed_stop_haov,
+        safe_speed_swerve_haov,
+        safe_speed_stop_vaov,
+        safe_speed_swerve_vaov,
+        object_height_meters
+    )

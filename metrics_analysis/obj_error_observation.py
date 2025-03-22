@@ -9,7 +9,7 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 # Directorios de las anotaciones
 gt_folder = "../labels/gt/"
-pred_folder = "../labels/pred/finetuned-detr/"
+pred_folder = "../labels/pred/rt-detr/"
 img_folder = "../images/obj_det_images/"
 
 # Parámetros

@@ -7,8 +7,8 @@ import sys
 import glob
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rt_detr.image_processing import plot_detr_results
-from rt_detr.model_rt_detr import load_rtdetr_model
+from rt_detrv2.image_processing import plot_detr_results
+from rt_detrv2.model_rt_detrv2 import load_rtdetr_model
 
 # Mapeo específico para etiquetas KITTI
 KITTI_CATEGORY_NAME_MAPPING = {
@@ -44,13 +44,13 @@ def generate_kitti_txt(image_path, model, image_processor, output_txt_path, conf
             with open(output_txt_path, 'a') as f:
                 f.write(line)
 
-    plot_detr_results(image_pil, bboxes, labels, model)
+   #plot_detr_results(image_pil, bboxes, labels, model)
 
 # Cargar modelo e image_processor
 rt_detr_model, image_processor = load_rtdetr_model()
 
-image_folder = "../images/obj_det_images/"
-output_folder = "../labels/pred/finetuned-detr/"
+image_folder = "../sample_data/valid/"
+output_folder = "../labels/pred/rt-detr/"
 
 image_paths = glob.glob(os.path.join(image_folder, "*.png"))
 
