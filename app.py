@@ -20,6 +20,9 @@ from glob import glob
 import shutil
 from gradio_modal import Modal
 import random
+import time 
+import threading
+
 
 # Añadir directorios al path
 sys.path.extend([
@@ -27,12 +30,15 @@ sys.path.extend([
     os.path.join(os.path.dirname(__file__), 'stereo_estimation', 'NMRF', 'ops', 'setup', 'MultiScaleDeformableAttention')
 ])
 
+image_path = os.path.join("outputs", "dept_with_colorbar.png")
+
 # Importar módulos personalizados
 from safety_calculator import calculate_lookahead_distance
 from rt_detrv2.model_rt_detrv2 import load_rtdetrv2_model, load_image_processor
 from yolov11_finetuning.model_yolo_f import load_yolov11_model_f
 from yolov11.model_yolo import load_yolov11_model
 from stereo_estimation.NMRF.disparity_inference import run_inference
+#from stereo_estimation.NMRF.nmrf.utils.visualization import gen_kitti_cmap
 
 """
 Función main para la interfaz de Gradio.
@@ -210,7 +216,6 @@ def get_camera_parameters(selected_dataset, custom_focal_length =None, custom_ba
     else:
         return None, None
 
-
 def generate_depth_map(disparity_path=None, focal_length=None, baseline=None):
     """
     Genera un mapa de profundidad con una barra de colores en el rango de metros 0-100.
@@ -238,7 +243,7 @@ def generate_depth_map(disparity_path=None, focal_length=None, baseline=None):
     depth_map = np.round(depth_map.numpy() * 256).astype(np.uint16)
     depth_map = depth_map.astype(np.float32) / 256.0
 
-    print(f"Valor mínimo y máximo del depth map en `generate_depth_map`: {depth_map.min()}, {depth_map.max()}")
+    #print(f"Valor mínimo y máximo del depth map en `generate_depth_map`: {depth_map.min()}, {depth_map.max()}")
 
     # Crear figura con barra de colores
     fig, ax = plt.subplots(dpi=300, frameon=False)
@@ -329,7 +334,12 @@ def only_depth_map(disparity_path=None, focal_length=None, baseline=None, input_
     save_depth_map = np.round(depth_map.numpy() * 256).astype(np.uint16)
     Image.fromarray(save_depth_map, mode='I;16').save(output_path)
 
+    # Guardar el mapa de profundidad como archivo .npy
+    npy_output_path = os.path.join(output_dir, f"{base_name}.npy")
+    np.save(npy_output_path, depth_map.numpy())
+
     #print(f"✅ Mapa de profundidad guardado en: {output_path}")
+    #print(f"✅ Mapa de profundidad guardado en formato .npy en: {npy_output_path}")
 
     return depth_map, output_path
 
@@ -647,7 +657,6 @@ def calculate_distance(mu, t, l, B, turning_car, cog, wheelbase, selected_object
         return fig1, fig2, fig3, fig4, selected_ifov, safe_speed_stop, safe_speed_swerve, safe_speed_stop_haov, safe_speed_swerve_haov, safe_speed_stop_vaov, safe_speed_swerve_vaov, object_height_meters
     except Exception as e:
         return gr.Warning(f"Error during calculation: {str(e)}"), None, None, None
-
 
 # Función para actualizar los parámetros del vehículo según el modelo seleccionado
 def update_vehicle_params(vehicle_model):
@@ -1110,7 +1119,7 @@ with gr.Blocks(theme=seafoam, css=custom_css) as demo:
         with gr.Row():
             with gr.Column():
                 mu = gr.Slider(0.0, 1.0, value=0.8, step=0.01, label="Coefficient of friction (mu)")
-                t = gr.Slider(0.0, 0.5, value=0.3, step=0.01, label="Perception time (t) [s]")
+                t = gr.Slider(0.0, 1.0, value=0.3, step=0.01, label="Perception time (t) [s]")
                 l = gr.Slider(0.0, 0.5, value=0.25, step=0.01, label="Latency (l) [s]")
                 B = gr.Slider(0.0, 3.0, value=2.0, step=0.1, label="Offset distance (df) [m]")
 
