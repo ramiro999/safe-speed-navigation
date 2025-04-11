@@ -135,7 +135,6 @@ def compute_iou_per_image(gt_data, pred_data):
     avg_iou = sum(total_iou) / len(total_iou) if total_iou else 0
     return iou_results, avg_iou
 
-
 # Evaluación de detección 2D con PyTorch
 def evaluate_2d_detection_pytorch(gt_folder, pred_folder, iou_threshold=0.5):
     gt_data, dontcare_data = load_ground_truth(gt_folder)  # Carga el GT y "DontCare"

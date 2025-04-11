@@ -16,13 +16,13 @@ from gradio.themes.base import Base
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from PIL import Image
+import matplotlib as mpl
 from glob import glob
 import shutil
 from gradio_modal import Modal
 import random
 import time 
 import threading
-
 
 # Añadir directorios al path
 sys.path.extend([
@@ -38,12 +38,10 @@ from rt_detrv2.model_rt_detrv2 import load_rtdetrv2_model, load_image_processor
 from yolov11_finetuning.model_yolo_f import load_yolov11_model_f
 from yolov11.model_yolo import load_yolov11_model
 from stereo_estimation.NMRF.disparity_inference import run_inference
-#from stereo_estimation.NMRF.nmrf.utils.visualization import gen_kitti_cmap
 
 """
 Función main para la interfaz de Gradio.
 """
-
 
 # Cargar el modelo RT-DETRv2
 rt_detrv2 = load_rtdetrv2_model()
@@ -101,6 +99,9 @@ DRIVING_STEREO_IMAGES_RIGHT = [
 "./images/stereo_images/driving_stereo_images_right/2018-10-31-06-55-01_2018-10-31-06-59-29-671.png",
 "./images/stereo_images/driving_stereo_images_right/2018-07-11-14-48-52_2018-07-11-14-50-33-885.png",
 ]
+
+OWN_IMAGES_FOCAL_LENGTH = 0
+OWN_IMAGES_BASELINE = 0
 
 object_distance = None # Distancia del objeto al sistema óptico en metros
 object_distance_mm = None  # Distancia del objeto al sistema óptico en milímetros
@@ -181,12 +182,64 @@ def stereo_inference(image_path_left=None, image_path_right=None):
 
         print(f"Rangos minimo y maximo del disp_pred: {disp_preds[0].min()}, {disp_preds[0].max()}")
 
-        # Mostrar la imagen de disparidad con un colorbar
-        disparity_image = cv2.imread(stereo_output_image, cv2.IMREAD_GRAYSCALE)
-        plt.figure(figsize=(10, 5))
-        plt.imshow(disparity_image)
-        plt.colorbar(label='Disparity (pixels)')
-        plt.axis('off')
+        disp_img_pil = Image.open(stereo_output_image).convert("RGB")
+
+        fig, ax = plt.subplots(dpi=300, frameon=False)
+
+        # Mostrar la imagen de disparidad renderizada
+        disp_array = np.array(disp_img_pil)
+        ax.imshow(disp_array)
+        ax.axis('off')
+
+        # Crear colormap KITTI
+        def gen_kitti_cmap():
+            map = np.array([[0, 0, 0, 114],
+                            [0, 0, 1, 185],
+                            [1, 0, 0, 114],
+                            [1, 0, 1, 174],
+                            [0, 1, 0, 114],
+                            [0, 1, 1, 185],
+                            [1, 1, 0, 114],
+                            [1, 1, 1, 0]])
+            bins = map[:-1, 3]
+            cbins = np.cumsum(bins)
+            cbins = cbins[:-1] / cbins[-1]
+            nodes = np.concatenate([np.array([0]), cbins, np.array([1])])
+            colors = map[:, :3] / 1.0
+            return mpl.colors.LinearSegmentedColormap.from_list("kitti", list(zip(nodes, colors)))
+
+        # Agregar colorbar debajo con el colormap KITTI
+        norm = mpl.colors.Normalize(
+            vmin=stereo_output_pred.min().item(),
+            vmax=stereo_output_pred.max().item()
+        )
+        sm = mpl.cm.ScalarMappable(cmap=gen_kitti_cmap(), norm=norm)
+        sm.set_array([])
+
+        cbar = fig.colorbar(sm, ax=ax, orientation='horizontal', pad=0.02, label='Disparity (pixels)')
+        cbar.ax.tick_params(labelsize=6)
+        cbar.ax.xaxis.label.set_size(6)
+
+        # Colores para dark/light mode automático
+        if plt.rcParams['axes.facecolor'] == 'white':
+            cbar.ax.xaxis.label.set_color('black')
+            cbar.ax.tick_params(color='black')
+            plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='black')
+        else:
+            cbar.ax.xaxis.label.set_color('white')
+            cbar.ax.tick_params(color='white')
+            plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='white')
+
+        # Ajustar diseño para eliminar bordes
+        plt.gca().spines['top'].set_visible(False)
+        plt.gca().spines['right'].set_visible(False)
+        plt.gca().spines['left'].set_visible(False)
+        plt.gca().spines['bottom'].set_visible(False)
+        fig.subplots_adjust(left=0, right=1, top=1, bottom=0.1)
+
+        # Guardar imagen final con colorbar embebida
+        stereo_output_image = stereo_output_image.replace('.png', '_with_colorbar.png')
+        plt.savefig(stereo_output_image, bbox_inches='tight', pad_inches=0, dpi=300, transparent=True)
         plt.close()
 
         return gr.update(value=stereo_output_image, visible=True)
@@ -195,11 +248,9 @@ def stereo_inference(image_path_left=None, image_path_right=None):
     raise FileNotFoundError("No generated image was found in the results folder.")
 
 def get_camera_parameters(selected_dataset, custom_focal_length =None, custom_baseline=None):
-
     """
     Obtiene los parámetros de la cámara (focal length y baseline).
     """
-
     if custom_focal_length is not None and custom_baseline is not None:
         try:
             return float(custom_focal_length), float(custom_baseline)
@@ -211,10 +262,6 @@ def get_camera_parameters(selected_dataset, custom_focal_length =None, custom_ba
         return KITTI_FOCAL_LENGTH, KITTI_BASELINE
     elif selected_dataset == "Driving Stereo":
         return DRIVING_STEREO_FOCAL_LENGTH, DRIVING_STEREO_BASELINE
-    elif selected_dataset == "Own images":
-        return None, None  
-    else:
-        return None, None
 
 def generate_depth_map(disparity_path=None, focal_length=None, baseline=None):
     """
@@ -366,6 +413,12 @@ def object_detection_with_disparity(selected_model_name, selected_dataset, focal
     
     focal_length, baseline = get_camera_parameters(selected_dataset, focal_length, baseline)
 
+    if selected_dataset == "Own images" and (not focal_length or not baseline):
+        return None, gr.Warning("⚠️ Please enter both focal length and baseline for 'Own images'.")
+
+    if focal_length is None or baseline is None:
+        return None, gr.Warning("⚠️ Please select a dataset or provide your own camera parameters.")
+
     # Generar el mapa de profundidad Z (en metros)
     depth, depth_map_path = only_depth_map(stereo_output_image, focal_length, baseline)
 
@@ -436,13 +489,13 @@ def object_detection_with_disparity(selected_model_name, selected_dataset, focal
         elif selected_model_name == "YOLOv11":
             x0, y0, x1, y1 = map(int, bbox)
 
-        height_bb = abs(y1 - y0) # Poner cuanto vale en metros la altura de la caja delimitadora
+        height_bb = abs(y1 - y0)
 
         # Recortar región del mapa de profundidad correspondiente al bounding box
         bbox_depth = depth[y0:y1, x0:x1]
         bbox_valid = bbox_depth[bbox_depth > 0]
 
-        # Calcular distancia media en región válida
+        # Calcular distancia mediana en región válida
         if len(bbox_valid) > 0:
             median_distance = np.median(bbox_valid)
         else:
@@ -558,8 +611,12 @@ def object_detection_with_disparity(selected_model_name, selected_dataset, focal
         focalLength = focalLengthPixels * pixSize
         imageHeight = 800
         sensorSize = pixSize * imageHeight
-    else:
-        pixSize, focalLength, imageHeight, sensorSize = None, None, None, None
+    elif selected_dataset == "Own images":
+        pixSize = 4.65e-3 # Valor por defecto, se puede cambiar e implementar una interfaz para el usuario
+        focalLengthPixels = focal_length
+        focalLength = focalLengthPixels * pixSize
+        imageHeight = image.shape[0]
+        sensorSize = pixSize * imageHeight
 
     if focalLength and imageHeight:
         for obj in objects_info:
@@ -975,7 +1032,6 @@ with gr.Blocks(theme=seafoam, css=custom_css) as demo:
             image_path_left = gr.Image(label="Left Image")
             image_path_right = gr.Image(label="Right Image")
 
-
         with gr.Row():
             # Campo para mostrar los parámetros seleccionados
             focal_length_display = gr.Number(label="Focal Length [px]", interactive=True)
@@ -1000,7 +1056,7 @@ with gr.Blocks(theme=seafoam, css=custom_css) as demo:
             elif selected_dataset == "Own images":
                 return (
                     None, None,
-                    "", "",
+                    OWN_IMAGES_FOCAL_LENGTH, OWN_IMAGES_BASELINE
                 )
 
         dataset_selection.change(
@@ -1027,7 +1083,7 @@ with gr.Blocks(theme=seafoam, css=custom_css) as demo:
                 return gr.Warning("Please run stereo inference first to generate the disparity map.")
             
             if selected_dataset == "Own images" and (not focal_length or not baseline):
-                return gr.Warning("⚠️ Please provide valid focal length and baseline values for 'Own Images'.")
+                return gr.Warning("⚠️ Please provide valid focal length and baseline values for 'Own images'.")
             
             focal_length, baseline = get_camera_parameters(selected_dataset, focal_length, baseline)
 
@@ -1044,7 +1100,6 @@ with gr.Blocks(theme=seafoam, css=custom_css) as demo:
 
             # Devolver la imagen generada directamente
             return gr.update(value=depth_output_path_with_colorbar, visible=True)
-
 
         generate_depth_button.click(display_depth_map, inputs=[dataset_selection, focal_length_display, baseline_display], outputs=depth_image)
 
@@ -1114,7 +1169,7 @@ with gr.Blocks(theme=seafoam, css=custom_css) as demo:
             }
         </style>
                 
-        <p style="text-align: center;">Calculate the lookahead distance for stopping and swerving and optic system parameters based on the selected objects and vehicle parameters.</p>        
+        <p style="text-align: center;">Calculate the lookahead distance for stopping and swerving and optical system parameters based on the selected objects and vehicle parameters.</p>        
         """)        
         with gr.Row():
             with gr.Column():
@@ -1130,7 +1185,7 @@ with gr.Blocks(theme=seafoam, css=custom_css) as demo:
                     interactive=True
                 )
                 turning_car = gr.Slider(0.0, 20.0, value=11.4, step=1.0, label="Turning Radius [m]")
-                cog = gr.Slider(0.0, 2.0, value=0.55, step=0.01, label="Height of Center Gravity (COG) [m]")
+                cog = gr.Slider(0.0, 2.0, value=0.55, step=0.01, label="Height of Center of Gravity (COG) [m]")
                 wheelbase = gr.Slider(0.0, 3.0, value=2.71, step=0.01, label="Width of Wheelbase [m]")
 
                 vehicle_name.change(

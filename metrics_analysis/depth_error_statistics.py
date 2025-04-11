@@ -5,7 +5,7 @@ import numpy as np
 import seaborn as sns
 
 # Ruta del archivo CSV
-csv_path = "../metrics/metric_results_test.csv"  # Asegúrate de colocar la ruta correcta
+csv_path = "../metrics/metric_results_test.csv"
 
 # Cargar el archivo CSV
 df = pd.read_csv(csv_path)
@@ -21,14 +21,14 @@ print(mean_values)
 print("\n📉 Desviación estándar de cada métrica:")
 print(std_values)
 
-# Opcional: Guardar los resultados en un archivo CSV
+# Se guardan los resultados en un archivo CSV
 summary_path = "metric_summary_test.csv"
 summary_df = pd.DataFrame({"Métrica": mean_values.index, "Media": mean_values.values, "Desviación Estándar": std_values.values})
 summary_df.to_csv(summary_path, index=False)
 
 print(f"\n✅ Resultados guardados en: {summary_path}")
 
-# Crear gráficos de barras para la media y la desviación estándar
+# Gráficos de barras para la media y la desviación estándar
 
 # Gráfico de Media
 plt.figure(figsize=(8, 5))
@@ -59,13 +59,13 @@ metrics = ["mae", "rmse", "imae", "irmse"]
 
 # Entrenamiento
 
-files = {
-    "Carretera": "../metrics_analysis/results_depth/kitti/train/road/metric_summary_train_road.csv",
-    "Residencial": "../metrics_analysis/results_depth/kitti/train/residential/metric_summary_train_residential.csv",
-    "Persona": "../metrics_analysis/results_depth/kitti/train/person/metric_summary_train_person.csv",
-    "Ciudad": "../metrics_analysis/results_depth/kitti/train/city/metric_summary_train_city.csv",
-    "Campus": "../metrics_analysis/results_depth/kitti/train/campus/metric_summary_train_campus.csv",
-}
+# files = {
+#    "Carretera": "../metrics_analysis/results_depth/kitti/train/road/metric_summary_train_road.csv",
+#    "Residencial": "../metrics_analysis/results_depth/kitti/train/residential/metric_summary_train_residential.csv",
+#    "Persona": "../metrics_analysis/results_depth/kitti/train/person/metric_summary_train_person.csv",
+#    "Ciudad": "../metrics_analysis/results_depth/kitti/train/city/metric_summary_train_city.csv",
+#    "Campus": "../metrics_analysis/results_depth/kitti/train/campus/metric_summary_train_campus.csv",
+#}
 
 # Validacion
 
@@ -79,19 +79,18 @@ files = {
 
 
 # Prueba
-# files = {
-#     "Conducción": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_driving.csv",
-#     "Soleado": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_sunny.csv", 
-#     "Neblina": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_foggy.csv",
-#     "Nublado": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_cloudy.csv",
-#     "Lluvioso": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_rainy.csv"
-# }
+files = {
+     "Conducción": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_driving.csv",
+     "Soleado": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_sunny.csv", 
+     "Neblina": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_foggy.csv",
+     "Nublado": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_cloudy.csv",
+     "Lluvioso": "../metrics_analysis/results_depth/driving_stereo/test/metric_summary_rainy.csv"
+ }
 
 
 # Leer los archivos y almacenarlos en un diccionario
 data = {key: pd.read_csv(file) for key, file in files.items()}
 
-# Crear un DataFrame vacío para almacenar los datos consolidados
 summary_df = pd.DataFrame(columns=["Class"] + metrics)
 
 # Extraer las métricas de la columna "Media"

@@ -92,7 +92,6 @@ def update_map_metric(iou_df):
     map_metric.update(preds, targets)
     return map_metric.compute()
 
-
 # Obtener la lista de archivos en la carpeta de ground truth
 gt_files = sorted([f for f in os.listdir(gt_folder) if f.endswith('.txt')])
 
@@ -122,10 +121,6 @@ for gt_file in gt_files:
                 break
         if not ignore:
             filtered_preds.append((label, pred_box))
-
-    # Descartar detecciones con altura menor a min_bbox_height
-    #filtered_preds = [(label, box) for label, box in filtered_preds if box[3] - box[1] >= min_bbox_height]
-    #print(f"🔹 Imagen {image_id} - Detecciones originales: {len(pred_boxes)} -> Detecciones despues del filtrado: {len(filtered_preds)}")
 
     # Evaluación de TP, FP y FN
     tp, fp, fn = 0, 0, 0
@@ -191,9 +186,6 @@ mean_iou_cyc = iou_cyc.mean() if not iou_cyc.empty else 0
 
 # Calcular mAP con torchmetrics
 map_results = update_map_metric(iou_df)
-
-#tp_ious = iou_df[iou_df["Status"] == "TP"]["IoU"]
-#mean_iou_tp = tp_ious.mean() if not tp_ious.empty else 0
 
 print("\n📊 Métricas Globales de Evaluación")
 print(f"✔ Verdaderos Positivos (TP): {global_tp}")
